@@ -1,0 +1,485 @@
+/*
+=============================================================================
+	File:	HLSL.atg
+	Desc:	Shader script grammar specification for CoCo/R.
+			This is basically an extended HLSL grammar.
+=============================================================================
+*/
+
+// The name after the keyword COMPILER is the grammar name and must match the name 
+// after the keyword  END. The grammar name also denotes the topmost nonterminal 
+// symbol (the start symbol). The parser specification must contain a production for this 
+// symbol. 
+COMPILER HLSL
+
+
+//---------------------------------------------------------------------------
+// Fields and methods of the generated parser.
+// They are copied to the header file of the generated parser.
+//---------------------------------------------------------------------------
+
+//---------------------------------------------------------------------------
+//	Scanner specification
+//---------------------------------------------------------------------------
+
+// By default, Coco/R generates scanners that are case sensitive.
+// If this is not desired, one has to write IGNORECASE at the beginning of the scanner specification.
+//
+//IGNORECASE
+
+
+CHARACTERS
+	letter     = 'A'..'Z' + 'a'..'z' + '_'.
+	oct        = '0'..'7'.	// the set of all octal digits
+	digit      = '0'..'9'.	// the set of all decimal digits
+	nzdigit    = '1'..'9'.	// the set of all hexadecimal digits
+	hex        = digit + 'a'..'f' + 'A'..'F'.
+	notQuote   = ANY - '"' - "\r\n".
+	notApo     = ANY - '\'' - "\r\n".
+	notDigit	= ANY - digit.	// any character that is not a digit
+
+	tab        = '\t'.
+	cr         = '\r'.
+	lf         = '\n'.			// end of line
+	newLine    = cr + lf.
+	notNewLine = ANY - newLine .
+	ws         = " " + tab + '\u000b' + '\u000c'.
+
+TOKENS
+	// identifier
+	identifier    = letter {letter | digit}.
+
+	// floating-point constant
+	float_constant =
+		( '.' digit {digit} [('e'|'E')  ['+'|'-'] digit {digit}]
+			| digit {digit} '.' {digit} [('e'|'E')  ['+'|'-'] digit {digit}]
+			| digit {digit} ('e'|'E')  ['+'|'-'] digit {digit}
+		)
+		['f'|'l'|'F'|'L']
+		.
+
+	// integer constant
+	integer_constant =
+		( nzdigit {digit}
+			| '0' {oct}
+			| ("0x"|"0X") hex {hex}
+		)
+		{'u'|'U'|'l'|'L'}
+		.
+		
+	// character constant
+	char_constant  = '\'' notApo {notApo} '\''. // no check for valid escape sequences
+
+	// string constant
+	string   = '"' {notQuote} '"'.        // no check for valid escape sequences
+	
+	//optional_semicolon = {';'}.
+
+	// tokens defined in order to get their names for LL(1) conflict resolvers
+	auto      = "auto".
+	case      = "case".
+	cbuffer   = "cbuffer".
+	char      = "char".
+	const     = "const".
+	default   = "default".
+	double    = "double".
+	enum      = "enum".
+	extern    = "extern".
+	float     = "float".
+	int       = "int".
+	long      = "long".
+	register  = "register".
+	short     = "short".
+	signed    = "signed".
+	static    = "static".
+	struct    = "struct".
+	typedef   = "typedef".
+	union     = "union".
+	unsigned  = "unsigned".
+	void      = "void".
+	volatile  = "volatile".
+	comma     = ','.
+	semicolon = ';'.
+	colon     = ':'.
+	star      = '*'.
+	lpar      = '('.
+	rpar      = ')'.
+	lbrack    = '['.
+	rbrace    = '}'.
+	ellipsis  = "...".
+
+	// DirectX-specific
+
+
+// Pragmas are tokens that may occur anywhere in the input stream.
+// They are excluded from the token  stream that is passed to the parser.
+// Pragmas are declared like tokens, but they may  have a semantic action
+//  associated with them that is executed whenever they are recognized by the scanner.
+//
+PRAGMAS
+	//---- preprocessor commands (not handled here)
+	ppDefine  = '#' {ws} "define" {notNewLine} newLine.
+	ppUndef   = '#' {ws} "undef" {notNewLine} newLine.
+	ppIf      = '#' {ws} "if" {notNewLine} newLine.
+	ppElif    = '#' {ws} "elif" {notNewLine} newLine.
+	ppElse    = '#' {ws} "else" {notNewLine} newLine.
+	ppEndif   = '#' {ws} "endif" {notNewLine} newLine.
+	ppInclude = '#' {ws} "include" {notNewLine} newLine.
+
+// Comments are declared by specifying their opening and closing brackets.
+// The keyword NESTED denotes that they can be nested.
+//
+COMMENTS FROM "//" TO lf			// C++-style one-line comment
+COMMENTS FROM "/*" TO "*/"			// C-style multi-line comment
+COMMENTS FROM "/+" TO "+/" NESTED	// D-style nested comment
+
+// Characters such as blanks, tabulators or end-of-line symbols are usually considered
+// as  white space that should be  ignored by the scanner.
+//
+IGNORE '\t' + '\r' + '\n'
+
+
+//---------------------------------------------------------------------------
+//	Parser specification
+//---------------------------------------------------------------------------
+
+PRODUCTIONS
+
+
+HLSL
+	= declaration {declaration}
+	.
+
+declaration
+	= render_target_declaration
+	| sampler_state_declaration
+	| depth_stencil_state_declaration
+	| rasterizer_state_declaration
+	| blend_state_declaration
+	| state_block_declaration
+	.
+
+render_target_declaration =			(. wrRenderTarget& newRT = CurrentSourceFile().renderTargets.Add(); newRT.pos = CurrLocation(); .)
+	"RenderTarget" identifier		(. newRT.name = CurrToken(); .)
+	'{'
+		( ("SizeX" integer_constant)	(. newRT.sizeX.SetAbsoluteSize( StringToU32(CurrTokenText()) ); .)
+		| ("ScaleX" float_constant)		(. newRT.sizeX.SetRelativeSize( StringToF32(CurrTokenText()) ); .)
+		)
+
+		( ("SizeY" integer_constant)	(. newRT.sizeY.SetAbsoluteSize( StringToU32(CurrTokenText()) ); .)
+		| ("ScaleY" float_constant)		(. newRT.sizeY.SetRelativeSize( StringToF32(CurrTokenText()) ); .)
+		)
+
+		"Format" identifier				(. newRT.format = CurrToken(); .)
+
+		[ "Info" string ]				(. newRT.info = CurrToken(); .)
+	'}'
+	.
+
+
+depth_stencil_state_declaration =	(. wrDepthStencilState& newDS = CurrentSourceFile().depthStencilStates.Add(); newDS.pos = CurrLocation(); .)
+	"DepthStencilState" identifier		(. newDS.name = CurrToken(); .)
+	'{'
+		"DepthEnable" boolean_constant		(. newDS.DepthEnable = CurrToken(); .)
+		"DepthWriteMask" identifier 		(. newDS.DepthWriteMask = CurrToken(); .)
+		"DepthFunc" identifier 				(. newDS.DepthFunc = CurrToken(); .)
+		"StencilEnable" boolean_constant 	(. newDS.StencilEnable = CurrToken(); .)
+	'}'
+	.
+
+rasterizer_state_declaration =	(. wrRasterizerState& newRS = CurrentSourceFile().rasterizerStates.Add(); newRS.pos = CurrLocation(); .)
+	"RasterizerState" identifier		(. newRS.name = CurrToken(); .)
+	'{'
+		"FillMode" identifier						(. newRS.FillMode = CurrToken(); .)
+		"CullMode" identifier 						(. newRS.CullMode = CurrToken(); .)
+		[ "FrontCounterClockwise" boolean_constant 	(. newRS.FrontCounterClockwise = CurrToken(); .)]
+		[ "DepthBias" integer_constant 				(. newRS.DepthBias = CurrToken(); .)]
+		[ "DepthBiasClamp" float_constant			(. newRS.DepthBiasClamp = CurrToken(); .)]
+		[ "SlopeScaledDepthBias" float_constant 	(. newRS.SlopeScaledDepthBias = CurrToken(); .)]
+		[ "DepthClipEnable" boolean_constant 		(. newRS.DepthClipEnable = CurrToken(); .)]
+		[ "ScissorEnable" boolean_constant 			(. newRS.ScissorEnable = CurrToken(); .)]
+		[ "MultisampleEnable" boolean_constant 		(. newRS.MultisampleEnable = CurrToken(); .)]
+		[ "AntialiasedLineEnable" boolean_constant 	(. newRS.AntialiasedLineEnable = CurrToken(); .)]
+	'}'
+	.
+
+sampler_state_declaration =			(. wrSamplerState& newSS = CurrentSourceFile().samplerStates.Add(); newSS.pos = CurrLocation(); .)
+	"SamplerState" identifier		(. newSS.name = CurrToken(); .)
+	'{'
+		"Filter" identifier				(. newSS.filter = CurrToken(); .)
+		[ "AddressU" identifier 		(. newSS.addressU = CurrToken(); .)]
+		[ "AddressV" identifier 		(. newSS.addressV = CurrToken(); .)]
+		[ "AddressW" identifier 		(. newSS.addressW = CurrToken(); .)]
+		/*
+		([ "MipLODBias" float_constant ]		(. Unimplemented; .))
+		([ "MaxAnisotropy" integer_constant ]		(. Unimplemented; .))
+		([ "ComparisonFunc" identifier ]		(. Unimplemented; .))
+		//FLOAT BorderColor[ 4 ];			(. Unimplemented; .)
+		([ "MinLOD" float_constant ]			(. Unimplemented; .))
+		([ "MaxLOD" float_constant ]			(. Unimplemented; .))
+		*/
+	'}'
+	.
+
+/*
+
+typedef 
+enum D3D11_BLEND
+    {	D3D11_BLEND_ZERO	= 1,
+	D3D11_BLEND_ONE	= 2,
+	D3D11_BLEND_SRC_COLOR	= 3,
+	D3D11_BLEND_INV_SRC_COLOR	= 4,
+	D3D11_BLEND_SRC_ALPHA	= 5,
+	D3D11_BLEND_INV_SRC_ALPHA	= 6,
+	D3D11_BLEND_DEST_ALPHA	= 7,
+	D3D11_BLEND_INV_DEST_ALPHA	= 8,
+	D3D11_BLEND_DEST_COLOR	= 9,
+	D3D11_BLEND_INV_DEST_COLOR	= 10,
+	D3D11_BLEND_SRC_ALPHA_SAT	= 11,
+	D3D11_BLEND_BLEND_FACTOR	= 14,
+	D3D11_BLEND_INV_BLEND_FACTOR	= 15,
+	D3D11_BLEND_SRC1_COLOR	= 16,
+	D3D11_BLEND_INV_SRC1_COLOR	= 17,
+	D3D11_BLEND_SRC1_ALPHA	= 18,
+	D3D11_BLEND_INV_SRC1_ALPHA	= 19
+    } 	D3D11_BLEND;
+
+typedef 
+enum D3D11_BLEND_OP
+    {	D3D11_BLEND_OP_ADD	= 1,
+	D3D11_BLEND_OP_SUBTRACT	= 2,
+	D3D11_BLEND_OP_REV_SUBTRACT	= 3,
+	D3D11_BLEND_OP_MIN	= 4,
+	D3D11_BLEND_OP_MAX	= 5
+    } 	D3D11_BLEND_OP;
+
+typedef 
+enum D3D11_COLOR_WRITE_ENABLE
+    {	D3D11_COLOR_WRITE_ENABLE_RED	= 1,
+	D3D11_COLOR_WRITE_ENABLE_GREEN	= 2,
+	D3D11_COLOR_WRITE_ENABLE_BLUE	= 4,
+	D3D11_COLOR_WRITE_ENABLE_ALPHA	= 8,
+	D3D11_COLOR_WRITE_ENABLE_ALL	= ( ( ( D3D11_COLOR_WRITE_ENABLE_RED | D3D11_COLOR_WRITE_ENABLE_GREEN )  | D3D11_COLOR_WRITE_ENABLE_BLUE )  | D3D11_COLOR_WRITE_ENABLE_ALPHA ) 
+    } 	D3D11_COLOR_WRITE_ENABLE;
+
+typedef struct D3D11_RENDER_TARGET_BLEND_DESC
+    {
+    BOOL BlendEnable;
+    D3D11_BLEND SrcBlend;
+    D3D11_BLEND DestBlend;
+    D3D11_BLEND_OP BlendOp;
+    D3D11_BLEND SrcBlendAlpha;
+    D3D11_BLEND DestBlendAlpha;
+    D3D11_BLEND_OP BlendOpAlpha;
+    UINT8 RenderTargetWriteMask;
+    } 	D3D11_RENDER_TARGET_BLEND_DESC;
+
+typedef struct D3D11_BLEND_DESC
+    {
+    BOOL AlphaToCoverageEnable;
+    BOOL IndependentBlendEnable;
+    D3D11_RENDER_TARGET_BLEND_DESC RenderTarget[ 8 ];
+    } 	D3D11_BLEND_DESC;
+*/
+//
+// Only one render target supported only!
+//
+blend_state_declaration =	(. wrBlendState& newBS = CurrentSourceFile().blendStates.Add(); newBS.pos = CurrLocation(); .)
+	"BlendState" identifier		(. newBS.name = CurrToken(); .)
+	'{'
+		"BlendEnable" boolean_constant				(. newBS.BlendEnable = CurrToken(); .)
+		[ "AlphaToCoverageEnable" boolean_constant	(. newBS.AlphaToCoverageEnable = CurrToken(); .)]
+		[ "SrcBlend" identifier 					(. newBS.SrcBlend = CurrToken(); .)]
+		[ "DestBlend" identifier 					(. newBS.DestBlend = CurrToken(); .)]
+		[ "BlendOp" identifier 						(. newBS.BlendOp= CurrToken(); .)]
+		[ "SrcBlendAlpha" identifier				(. newBS.SrcBlendAlpha = CurrToken(); .)]
+		[ "DestBlendAlpha" identifier 				(. newBS.DestBlendAlpha = CurrToken(); .)]
+		[ "BlendOpAlpha" identifier 				(. newBS.BlendOpAlpha = CurrToken(); .)]
+		[ "RenderTargetWriteMask" identifier		(. newBS.RenderTargetWriteMask = CurrToken(); .)]
+	'}'
+	.
+
+state_block_declaration =	(. wrStateBlock& newSB = CurrentSourceFile().stateBlocks.Add(); newSB.pos = CurrLocation(); .)
+	"StateBlock" identifier		(. newSB.name = CurrToken(); .)
+	'{'
+		[ "RasterizerState" identifier 				(. newSB.rasterizerState = CurrToken(); .)]
+
+		[ "DepthStencilState" identifier			(. newSB.depthStencilState = CurrToken(); .)]
+		[ "StencilRef" integer_constant 			(. newSB.stencilRef = CurrToken(); .)]
+		
+		[ "BlendState" identifier 					(. newSB.blendState = CurrToken(); .)]
+		[ "BlendFactor" rgba_color< newSB.blendFactorRGBA > ]
+		[ "SampleMask" identifier 					(. newSB.sampleMask = CurrToken(); .)]
+	'}'
+	.
+
+rgba_color< FColor & rgba > =
+	"RGBA("
+		float_constant	(. rgba.R = CurrTokenToFloat( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.G = CurrTokenToFloat( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.B = CurrTokenToFloat( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.A = CurrTokenToFloat( 0.0f, 1.0f ); .)
+	')'
+	.
+
+boolean_constant = identifier | integer_constant.
+
+/*
+
+//---------- Compilation Unit ----------
+
+HLSL = 
+	ExternalDecl {ExternalDecl}.
+	
+ExternalDecl = 
+  DeclSpecifierList 
+  ( Declarator 
+    ( {Decl} '{' {IF(IsDecl()) Decl | Stat} '}'   // FunctionDef
+    | ['=' Initializer] {',' InitDeclarator}  ';' // Decl
+    )
+  | ';'                                           // Decl
+  ).
+
+
+//---------- Declarations ----------
+
+Decl = DeclSpecifierList [InitDeclarator {',' InitDeclarator}] ';'.
+
+InitDeclarator = Declarator ['=' Initializer].
+
+DeclSpecifierList = DeclSpecifier {IF(!IsDeclarator()) DeclSpecifier}.
+
+DeclSpecifier =
+		"typedef" | "extern" | "static" | "auto" | "register" // storage class specifier
+	| "const" | "volatile"                                  // TypeQualifier
+	| TypeSpecifier.
+
+TypeSpecifier =
+		"void" | "char" | "short" | "int" | "long" | "float" | "double" | "signed" | "unsigned"
+	| identifier // type name
+  | ("struct" | "union")
+    ( identifier ['{' StructDecl {StructDecl} '}']
+    | '{' StructDecl {StructDecl} '}'
+    )
+  | "enum"
+    ( identifier ['{' Enumerator {',' Enumerator} '}']
+    | '{' Enumerator {',' Enumerator} '}'
+    ).
+
+StructDecl = SpecifierQualifierList StructDeclarator {',' StructDeclarator} ';'.
+
+StructDeclarator = Declarator [':' ConstExpr] | ':'  ConstExpr.
+
+Enumerator = identifier ['=' ConstExpr].
+
+SpecifierQualifierList =
+  (TypeSpecifier | TypeQualifier)
+  { IF(!IsDeclarator())
+    (TypeSpecifier | TypeQualifier)
+  }.
+
+TypeQualifier = "const" | "volatile".
+
+Declarator =
+	[Pointer]
+	( identifier
+	| '(' Declarator ')'
+	)
+	{ '[' [ConstExpr] ']' 
+	| '(' [IF(!IsType0()) IdentList | ParamTypeList] ')' 
+	}.
+
+Pointer = '*'  {TypeQualifier} {'*'  {TypeQualifier}}.
+
+ParamTypeList = ParamDecl {IF(Continued1()) ',' ParamDecl} [',' "..."].
+
+ParamDecl = DeclSpecifierList [IF(IsAbstractDecl()) AbstractDeclarator | Declarator].
+
+IdentList = identifier {',' identifier}.
+
+TypeName = // a better name would be Type
+	SpecifierQualifierList [AbstractDeclarator].
+
+AbstractDeclarator =
+	Pointer [DirectAbstractDeclarator]
+| DirectAbstractDeclarator.
+
+DirectAbstractDeclarator =
+	( '(' [AbstractDeclarator | ParamTypeList] ')'
+	| '[' [ConstExpr] ']'
+	)
+	{ '[' [ConstExpr] ']' 
+	| '(' [ParamTypeList] ')'
+	}.
+
+Initializer = 
+    AssignExpr 
+  | '{'  Initializer {IF(Continued()) ',' Initializer} [','] '}'.
+
+
+//---------- Expressions ----------
+
+Expr       = AssignExpr {','  AssignExpr}.
+AssignExpr = CondExpr [AssignOp AssignExpr]. // relaxed
+CondExpr   = LogOrExpr ['?' Expr ':' CondExpr].
+LogOrExpr  = LogAndExpr {"||" LogAndExpr}.
+LogAndExpr = OrExpr {"&&" OrExpr}.
+OrExpr     = XorExpr {'|' XorExpr}.
+XorExpr    = AndExpr {'^' AndExpr}.
+AndExpr    = EqlExpr {'&' EqlExpr}.
+EqlExpr    = RelExpr {("==" | "!=") RelExpr}.
+RelExpr    = ShiftExpr {('<' | '>' | "<=" | ">=") ShiftExpr}.
+ShiftExpr  = AddExpr {("<<" | ">>") AddExpr}.
+AddExpr    = MultExpr {('+' | '-') MultExpr}.
+MultExpr   = CastExpr {('*' | '/' | '%') CastExpr}.
+CastExpr   = IF(IsType1()) '(' TypeName ')' CastExpr
+           | UnaryExpr.
+
+UnaryExpr =
+  {"++" | "--"}
+  ( PostfixExpr
+  | UnaryOp CastExpr
+  | "sizeof"  (IF(IsType1()) '(' TypeName ')' | UnaryExpr)
+  ).
+
+PostfixExpr =
+  Primary
+  { '[' Expr ']' 
+  | '.'  identifier
+  | "->" identifier
+  | '(' [ArgExprList] ')' 
+  | "++" 
+  | "--"
+  }.
+
+Primary = identifier | integer_constant | float_constant | char_constant | string | '(' Expr ')'.
+
+ConstExpr = CondExpr.
+
+ArgExprList = AssignExpr {','  AssignExpr}.
+
+UnaryOp = '&' | '*' | '+' | '-' | '~' | '!'.
+
+AssignOp = '=' | "*=" | "/=" | "%=" | "+=" | "-=" | "<<=" | ">>=" | "&=" | "^=" | "|=".
+
+
+//---------- Statements ----------
+
+Stat =
+	  IF(IsLabel()) (identifier | "case" ConstExpr | "default") ':' Stat
+	| Expr ';'
+	| '{' {IF(IsDecl()) Decl | Stat} '}'
+	| "if" '(' Expr ')' Stat ["else" Stat]
+	| "switch" '(' Expr ')' Stat
+	| "while" '(' Expr ')' Stat
+	| "do" Stat "while" '(' Expr ')' ';'
+	| "for" '(' (IF(IsDecl()) Decl | [Expr] ';') [Expr] ';' [Expr] ')' Stat
+	| "goto" identifier ';'
+	| "continue" ';'
+	| "break" ';'
+	| "return" [Expr] ';'
+	| ';'
+	.
+*/
+
+END HLSL.

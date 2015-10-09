@@ -1,0 +1,48 @@
+Editor - provides support for the editor.
+
+"Base" - common editor utilities.
+"ContentPipeline/" - automated content/asset pipeline.
+
+
+
+//---------------------------------------------------------------------------
+	Content pipeline
+//---------------------------------------------------------------------------
+
+
+Source Assets - can not be read by the engine
+->
+Intermediate files - can not be loaded by the engine
+->
+Compiled assets in binary form - can be directly loaded by the engine
+
+
+
+
+//---------------------------------------------------------------------------
+
+Quick notes:
+
+
+Binary format has several advantages over text-based format: 
+- Its faster to read and write than text-based format
+- It can skip regions within files that it cannot recognize (or does not want) faster 
+- It does not rely on numeric translation between ASCII and binary representation, which can lead to floating point data loss
+ 
+
+Text-based format has several advantages over binary format:
+
+- Its human readable 
+- It can be modified by hand when necessary 
+- Its searchable using standard file search tools like grep
+
+
+
+http://cowboyprogramming.com/2007/03/12/optimized-asset-processing/
+
+Asset processing tools come in three flavors: converters, calculators and packers. Converters take data which is arranged in a particular set of data structures, and re-arrange it into another set of data structures which are often machine or engine specific. A good example here is an texture converter, which might take texture in .PNG format, and convert it to a form that can be directly loaded into the graphic memory of the target hardware.
+
+Secondly we have asset calculators. These take an asset, or group of assets, and perform some set of calculations on them such as calculating lighting and shadows, or creating normal maps. Since these operations involve a lot of calculations, and several passes over the data, they typically take a lot longer than the asset conversion tools. Sometimes they take large assets, such as high resolution meshes, and produce smaller assets, such as displacement maps.
+
+Thirdly we have asset packers. These take the individual assets and package them into data sets for use in particular instances in the game, generally without changing them much. This might involve simply gathering all the files used by one level of the game and arranging them into a WAD file. Or it might involve grouping files together in such a way that that streaming can be effectively performed when moving from one area of the game to another. Since the amount of data that is involved can be very large, the packing process can take a lot of time and be very resource intensive - requiring lots of memory and disk space, especially for final builds.
+

@@ -1,0 +1,14 @@
+﻿""
+{
+"FILE_VERSION" = "9237"
+"ENLISTMENT_CHOICE" = "NEVER"
+"PROJECT_FILE_RELATIVE_PATH" = ""
+"NUMBER_OF_EXCLUDED_FILES" = "4"
+"EXCLUDED_FILE0" = "GeneratedFiles\\qrc_shadergenui.cpp"
+"EXCLUDED_FILE1" = "GeneratedFiles\\ui_shadergenui.h"
+"EXCLUDED_FILE2" = "GeneratedFiles\\Debug\\moc_shadergenui.cpp"
+"EXCLUDED_FILE3" = "GeneratedFiles\\Release\\moc_shadergenui.cpp"
+"ORIGINAL_PROJECT_FILE_PATH" = ""
+"NUMBER_OF_NESTED_PROJECTS" = "0"
+"SOURCE_CONTROL_SETTINGS_PROVIDER" = "PROJECT"
+}

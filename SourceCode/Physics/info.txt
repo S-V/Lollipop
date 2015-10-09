@@ -1,0 +1,8 @@
+Physics - is a minimalistic rigid body physics simulator.
+
+  Base - common utility code
+  Collide - collision detection
+  Integrate - numerical integration
+  Solve - constraint solver
+  Simulate - simulation environment, rigid bodies and physics worlds
+  Support - helper classes, utilities

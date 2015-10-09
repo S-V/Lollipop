@@ -1,0 +1,566 @@
+
+
+
+
+
+
+
+
+struct MyDirWalker
+{
+	mxPathName	m_destDir;
+
+	MyDirWalker( PCHARS destFolder )
+		: m_destDir( destFolder )
+	{
+		//
+	}
+	void ProcessFolder( PCHARS absPathName )
+	{
+
+	}
+	void ProcessFile( PCHARS absFilePath )
+	{
+		PCHARS pFileExtStr = oGetFileExtension( absFilePath );
+		if( nil == pFileExtStr ) {
+			return;
+		}
+		if( !mxStrEquAnsi( pFileExtStr, VPP_FILE_EXT ) ) {
+			return;
+		}
+
+		//
+	}
+};
+
+//---------------------------------------------------------------------------
+
+template< class WALKER >
+void FS_Recurse( PCHARS rootPath, WALKER & walker )
+{
+	AssertPtr(rootPath);
+
+	mxPathName	fullPath( rootPath );
+
+	ANSICHAR	tmp[ FS_MAX_PATH ];
+	MX_SPRINTF_ANSI( tmp, "%s*.*", fullPath.ToChars() );
+
+	WIN32_FIND_DATAA	findFileData;
+	const HANDLE fh = ::FindFirstFileA( tmp, &findFileData );
+
+	if( fh == INVALID_HANDLE_VALUE ) {
+		mxErrf("FindFirstFile('%s') failed\n",thePath);
+		return nil;
+	}
+
+	do
+	{
+		// skip self
+		if(mxStrEquAnsi( findFileData.cFileName, (".") ))
+		{
+			continue;
+		}
+		if(mxStrEquAnsi( findFileData.cFileName, ("..") ))
+		{
+			continue;
+		}
+
+		// skip hidden file
+		if( findFileData.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN )
+		{
+			continue;
+		}
+
+		// if this is directory
+		if( findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+		{
+			walker.ProcessFolder( findFileData.cFileName );
+
+			mxPathName	childPath( fullPath );
+			childPath.Append( findFileData.cFileName );
+			childPath.FixSlashes();
+			FS_Recurse( findFileData.cFileName );
+		}
+		else
+		{
+			walker.ProcessFile( findFileData.cFileName );
+		}
+	}
+	while( ::FindNextFileA( fh , &findFileData ) != 0 );
+}
+
+
+/*
+CreateVertexBuffer:
+	Length = 240000 bytes,	// max: 6000 vertices
+	Usage = Dynamic,
+
+	FVF = FLOAT4[0]D3DCOLOR[16]D3DCOLOR[20]FLOAT2[24]FLOAT2[32]
+	//FVF = Diffuse (ARGB32)|Specular (ARGB32)|XYZRHW (float4)|TEX2|TEX3|TEX6|TEX7|XYZB1|XYZB4|XYZB5|
+	8*4+2*4 = 40
+
+	Pool = Default
+
+	?
+	(DWORD + DWORD + float4 + 12 bytes = 40 bytes)
+	XYZB1:	X,Y,Z and 1 Blending Weight (Beta)	-	3*FloatSize+FloatSize
+	XYZB4:	X,Y,Z and 4 Betas	-	3*FloatSize+4*FloatSize
+
+
+CreateIndexBuffer:
+	Length = 20000 bytes,	// max: 10000 indices
+	Usage = Dynamic,
+	Format = 16,
+	Pool = Default
+
+SetStreamSource:
+	StreamNumber = 0, Stride = 40, Size = 240000 bytes, FVF = Diffuse (ARGB32) + Specular (ARGB32) + XYZRHW (float4) + XYZB1 + XYZB4
+
+SetIndices:
+	Format = 16, Size = 101 bytes, BaseVertexIndex = 20000
+*/
+
+
+//FVF = FLOAT4[0]D3DCOLOR[16]D3DCOLOR[20]FLOAT2[24]FLOAT2[32]
+#if 0
+
+	#pragma pack (push,1)
+	struct RF_Vertex
+	{
+		float	xyzw[4];	//16 XYZRHW
+		U32		argb_diffuse;	//4	Diffuse (ARGB)
+		U32		argb_spec;	//4	Specular (ARGB)
+		float	uv0[2];	//8
+		float	uv1[2];	//8
+	};
+	#pragma pack (pop)
+
+#else
+
+	#pragma pack (push,1)
+	struct RF_Vertex
+	{
+		float	xyz[3];		// 12 position
+		float	normal[3];	// 12 normal
+		float	uv0[2];		// 8 texture coords 1
+		float	uv1[2];		// 8 texture coords 2
+		// 40 bytes
+	};
+	#pragma pack (pop)
+
+
+#endif
+
+
+#pragma pack (push,1)
+struct RF_Mesh
+{
+	BYTE	signature[4];	//4 "D3FR"
+	U4		unkn0;			//4 (0000 0400)
+	U4		unkn1;			//4 (0100 0000)
+	BYTE	unkn2[12];		//12 (0)
+	U4		unkn2At24;		//4 (0100 0000) or (0600 0000)
+	BYTE	unkn3[12];		//12 (0)
+	BYTE	magicAt40[4];	//4 "MBUS"
+	U4		unkn4;			//4 (0)
+
+	BYTE	unknStr1[24];	//24[0x30] object name? e.g. "cables", "Plane01", "Plane03", "Parker", "Box01", "BOX", "Cylinder01", "OBJ_spool", "OBJ_Fighter01", "OBJ_Jeep01_A"
+	BYTE	unknStr2[24];	//24[0x48] e.g. "None"
+
+	U4		unkn5;			//4[0x60] e.g. (0700 0000)
+	U4		unkn6;			//4[0x64] e.g. (0100 0000), (0200 0000)
+	U4		unkn7;			//4[0x68] e.g. (00000000)
+
+	F4		center[3];		//12[0x6C] model center
+	F4		radius;			//4[0x78] bounding sphere radius
+	F4		aabbMin[3];		//12 bounding box minima
+	F4		aabbMax[3];		//12 bounding box maxima
+
+	// vertices?
+	RF_Vertex	verts[4];
+	//Vec3D	pos[4];
+	//Vec3D	nrm[4];
+	//Vec2D	uv[4];
+
+	// NOTE: triangles are stored in 32-bit integers, e.g.: 0000 0100 0200 0000 - first tri, 0100 0300 0200 0000 - second tri, etc.
+
+	U2			indices[100];
+};
+
+#pragma pack (pop)
+
+
+
+
+
+
+inline bool AreDifferent( UINT a, UINT b, UINT c )
+{
+#if 1
+	if( a == b )
+	{
+		return a != c;
+	}
+	if( a == c )
+	{
+		return a != b;
+	}
+	return true;
+#else
+	const UINT diff0 = a - b;
+	const UINT diff1 = b - c;
+	const UINT diff2 = c - a;
+	return (diff0 + diff1 + diff2) != 0;
+#endif
+}
+
+inline UINT GetDelta( UINT a, UINT b )
+{
+	const UINT maxAB = largest(a,b);
+	const UINT minAB = smallest(a,b);
+	return maxAB - minAB;
+}
+
+inline bool DifferenceLessThanDelta( UINT a, UINT b, UINT c, UINT delta )
+{
+	return GetDelta( a, b ) < delta
+		&& GetDelta( b, c ) < delta
+		&& GetDelta( a, a ) < delta
+		;
+}
+
+
+struct IndexData
+{
+	UINT	absOffset;	// rel to the beginning, in bytes
+	UINT	numIndices;	// index count
+};
+
+bool FindIndices_16_Bit_Internal( const BYTE* pSrcData, const UINT nDataSize, const UINT absOffset, IndexData &OutResult )
+{
+	if( nDataSize < 3*(sizeof U2) || absOffset >= nDataSize )
+	{
+		return false;
+	}
+
+	enum { MAX_INDICES = 65535 };
+	enum { MAX_INDEX = 50000 };
+	enum { MAX_DIFF = 10000 };
+
+	const U2* pIndices = (U2*) pSrcData;
+
+	const UINT maxIndices = (nDataSize / sizeof U2);
+	const UINT maxTriangles = maxIndices / 3;
+
+	UINT i = 0;
+	while( i < maxIndices )
+	{
+		const UINT index1 = pIndices[ i + 0 ];
+		const UINT index2 = pIndices[ i + 1 ];
+		const UINT index3 = pIndices[ i + 2 ];
+
+		const bool bIsValidTriangle =
+			(index1 < MAX_INDEX) && (index2 < MAX_INDEX) && (index3 < MAX_INDEX)
+
+			// not working - degenerate triangles
+			//(index1 != index2) && (index2 != index3) && (index3 != index1)
+
+			&& AreDifferent(index1,index2,index3)
+
+			//&& (Abs(index1-index3) < MAX_DIFF) && (Abs(index1-index2) < MAX_DIFF) && (Abs(index2-index3) < MAX_DIFF)
+			&& DifferenceLessThanDelta(index1,index2,index3,MAX_DIFF)
+			;
+
+		UINT currOffset = i * sizeof U2;
+
+		if( !bIsValidTriangle )//&& currOffset < nDataSize - 3*(sizeof U16) )
+		{
+			currOffset += 3*(sizeof U2);
+			//mxPutf("Invalid sequence ( %u %u %u ) at [%u]\n", index1,index2,index3,currOffset);
+			return FindIndices_16_Bit_Internal( pSrcData + currOffset, nDataSize - currOffset, absOffset + currOffset, OutResult );
+		}
+
+		mxPutf("%u %u %u at [%u]\n", index1,index2,index3,absOffset + currOffset);
+
+		i += 3;
+	}
+
+	const UINT numIndices = i;
+	const UINT numTriangles = numIndices / 3;
+	const UINT remainder = numIndices - numTriangles*3;
+	//Assert(remainder == 0);
+
+	OutResult.absOffset = absOffset + numIndices * (sizeof U2);
+	OutResult.numIndices = i;
+
+	mxPutf("%u indices at [%u] (remainder: %u)\n", numIndices,OutResult.absOffset,remainder);
+}
+
+bool FindIndices_16_Bit( const void* pSrcData, const UINT nDataSize, IndexData &OutResult )
+{
+	const BYTE* pRawBytes = (const BYTE*) pSrcData;
+
+	if( FindIndices_16_Bit_Internal( pRawBytes + 0, nDataSize - 0, 0, OutResult ) )
+	{
+		return true;
+	}
+	if( FindIndices_16_Bit_Internal( pRawBytes + 1, nDataSize - 1, 0, OutResult ) )
+	{
+		return true;
+	}
+	if( FindIndices_16_Bit_Internal( pRawBytes + 2, nDataSize - 2, 0, OutResult ) )
+	{
+		return true;
+	}
+	if( FindIndices_16_Bit_Internal( pRawBytes + 3, nDataSize - 3, 0, OutResult ) )
+	{
+		return true;
+	}
+
+	// ???
+	// START TRI OFFSET: 0x5286
+	// 4344 indices
+	// 1448 triangles
+	// LAST TRI OFFSET: 0x6378 (NEXT OFFSET: 0x637E)
+
+	//const UINT numIndices = i;
+	//const UINT numTriangles = numIndices / 3;
+	//const UINT remainder = numIndices - numTriangles*3;
+	//Assert(remainder == 0);
+
+	return false;
+}
+
+
+
+void Find_RF_Indices( const void* pSrcData, const UINT nDataSize )
+{
+	enum { MAX_INDICES = 65535 };
+	enum { MAX_INDEX = 50000 };
+	enum { MAX_DIFF = 10000 };
+
+	const U2* pIndices = (U2*) pSrcData;
+
+	const UINT maxIndices = (nDataSize / sizeof U2);
+	const UINT maxTriangles = maxIndices / 3;
+
+	UINT i = 0;
+	while( i < maxIndices )
+	{
+		const UINT index1 = pIndices[ i + 0 ];
+		const UINT index2 = pIndices[ i + 1 ];
+		const UINT index3 = pIndices[ i + 2 ];
+
+		const bool bIsValidTriangle =
+			(index1 < MAX_INDEX) && (index2 < MAX_INDEX) && (index3 < MAX_INDEX)
+
+			// not working - degenerate triangles
+			//(index1 != index2) && (index2 != index3) && (index3 != index1)
+
+			&& AreDifferent(index1,index2,index3)
+
+			//&& (Abs(index1-index3) < MAX_DIFF) && (Abs(index1-index2) < MAX_DIFF) && (Abs(index2-index3) < MAX_DIFF)
+			&& DifferenceLessThanDelta(index1,index2,index3,MAX_DIFF)
+			;
+
+		UINT currOffset = i * sizeof U2;
+
+		if( !bIsValidTriangle )//&& currOffset < nDataSize - 3*(sizeof U16) )
+		{
+			currOffset += 3*(sizeof U2);
+			//mxPutf("Invalid sequence ( %u %u %u ) at [%u]\n", index1,index2,index3,currOffset);
+			return FindIndices_16_Bit_Internal( pSrcData + currOffset, nDataSize - currOffset, absOffset + currOffset, OutResult );
+		}
+
+		mxPutf("%u %u %u at [%u]\n", index1,index2,index3,absOffset + currOffset);
+
+		i += 3;
+	}
+
+	const UINT numIndices = i;
+	const UINT numTriangles = numIndices / 3;
+	const UINT remainder = numIndices - numTriangles*3;
+	//Assert(remainder == 0);
+
+	OutResult.absOffset = absOffset + numIndices * (sizeof U2);
+	OutResult.numIndices = i;
+
+	mxPutf("%u indices at [%u] (remainder: %u)\n", numIndices,OutResult.absOffset,remainder);
+}
+
+
+
+
+
+	//const bool bOk = ExtractData( SRC_FILE, DEST_DIR );
+	//Assert(bOk);
+
+//	MyDirWalker		dirWalker();
+//	FS_Recurse( sf );
+
+#if 0
+
+	FileReader	file(
+		//"D:/dev/RF_PC/data/meshes/paper1.v3m"
+		//"D:/dev/RF_PC/data/meshes/Com_CtrlPanel01_Corpse.v3m"
+		//"D:/dev/RF_PC/data/meshes/Fighter02.v3m" //<- aabb offset should be less by 2 or 4 floats?
+
+		"D:/dev/RF_PC/data/meshes/paper1.v3m"
+	);
+
+	const SizeT fileSize = file.GetSize();
+
+	TList<BYTE>	buffer;
+	buffer.SetNum(fileSize);
+
+	file.Read(buffer.ToPtr(),fileSize);
+
+
+
+	IndexData	indexData;
+	FindIndices_16_Bit(buffer.ToPtr(),fileSize,indexData);
+
+
+
+	RF_Mesh* pMesh = (RF_Mesh*)buffer.ToPtr();
+
+	UINT s = sizeof RF_Vertex;
+	UINT off = OFFSET_OF(RF_Mesh,verts);
+
+	(void)s;(void)pMesh;
+	MX_DEBUG_BREAK;
+
+#endif
+
+
+#if 0
+	FileReader	file("D:/dev/RF_PC/data/meshes/Jeep01.v3m");
+
+	const SizeT fileSize = file.GetSize();
+
+	TList<BYTE>	buffer;
+	buffer.SetNum(fileSize);
+
+	file.Read(buffer.ToPtr(),fileSize);
+
+
+	const BYTE* pRawBytes = buffer.ToPtr();
+
+	const UINT indexDataOffset = 0x5286;
+
+	enum { MAX_INDICES = 65535 };
+	enum { MAX_INDEX = 50000 };
+	enum { MAX_DIFF = 10000 };
+
+	static UINT stats[MAX_INDICES] = {0};
+
+	const U16* pIndices = (U16*) (pRawBytes + indexDataOffset);
+
+	const UINT maxTriangles = ((fileSize - indexDataOffset) / sizeof U16) / 3;
+
+	UINT i = 0;
+	while( i < maxTriangles )
+	{
+		const UINT index1 = pIndices[ i + 0 ];
+		const UINT index2 = pIndices[ i + 1 ];
+		const UINT index3 = pIndices[ i + 2 ];
+
+		const bool bIsValidTriangle =
+			(index1 < MAX_INDEX) && (index2 < MAX_INDEX) && (index3 < MAX_INDEX)
+			
+			// not working - degenerate triangles
+			//(index1 != index2) && (index2 != index3) && (index3 != index1)
+
+			&& AreDifferent(index1,index2,index3)
+
+			//&& (Abs(index1-index3) < MAX_DIFF) && (Abs(index1-index2) < MAX_DIFF) && (Abs(index2-index3) < MAX_DIFF)
+			&& DifferenceLessThanDelta(index1,index2,index3,MAX_DIFF)
+			;
+
+		const UINT currOffset = indexDataOffset + i * sizeof U16;
+		(void)currOffset;
+
+		if(!bIsValidTriangle) {
+			break;
+		}
+
+		stats[index1]++;
+		stats[index2]++;
+		stats[index3]++;
+
+		mxPutf("%u %u %u at [%u]\n", index1,index2,index3,currOffset);
+
+		i += 3;
+	}
+
+	// ???
+	// START TRI OFFSET: 0x5286
+	// 4344 indices
+	// 1448 triangles
+	// LAST TRI OFFSET: 0x6378 (NEXT OFFSET: 0x637E)
+
+	const UINT numIndices = i;
+	const UINT numTriangles = numIndices / 3;
+	const UINT remainder = numIndices - numTriangles*3;
+	Assert(remainder == 0);
+
+	mxPutf("==============================================\n");
+	mxPutf("Indices: %u (%u tris), rem: %u.\n",numIndices,numTriangles,remainder);
+	mxPutf("==============================================\n");
+
+	for( UINT k=0; k < numIndices; k++ )
+	{
+		const UINT numUsages = stats[k];
+		if( numUsages == 0 ) {
+			mxPutf("Index [%u] is unused.\n",k);
+		}
+	}
+
+#endif
+
+
+
+
+
+
+
+
+
+
+
+	//TList< Vec2D >	lightMapTexCoords;
+lightMapTexCoords.SetNum( numVerts );
+
+	//const SizeT nLMTexCoordsOffset = file.Tell();
+	//(void)nLMTexCoordsOffset;
+	//file.Read( lightMapTexCoords.ToPtr(), lightMapTexCoords.GetDataSize() );
+
+
+
+	DEVOUT("\n==== Lightmap texture coordinates ====\n");
+	for( UINT iVertex = 0; iVertex < numVerts; iVertex++ )
+	{
+		const Vec2D& uv = texCoords[ iVertex ];
+
+		DEVOUT("LMUV[%u]: (%f %f)\n",
+			iVertex, uv.x, uv.y );
+	}
+
+
+XYZ[34]: (0.035809 0.161690 -0.393278), length = 0.426724, OUTSIDE BOUNDS!
+XYZ[35]: (0.091622 0.161743 -0.391934), length = 0.433783, OUTSIDE BOUNDS!
+XYZ[36]: (0.093200 0.019140 -0.451795), length = 0.461705, OUTSIDE BOUNDS!
+XYZ[37]: (0.037386 0.019087 -0.453139), length = 0.455079, OUTSIDE BOUNDS!
+
+XYZ[59]: (0.090503 0.004616 -0.340174), length = 0.352038, OUTSIDE BOUNDS!
+XYZ[60]: (0.034736 0.004562 -0.341517), length = 0.343309, OUTSIDE BOUNDS!
+XYZ[61]: (0.093200 0.019140 -0.451795), length = 0.461705, OUTSIDE BOUNDS!
+XYZ[62]: (0.037386 0.019087 -0.453139), length = 0.455079, OUTSIDE BOUNDS!
+XYZ[109]: (0.091622 0.161743 -0.391934), length = 0.433783, OUTSIDE BOUNDS!
+XYZ[110]: (0.090503 0.004616 -0.340174), length = 0.352038, OUTSIDE BOUNDS!
+XYZ[111]: (0.093200 0.019140 -0.451795), length = 0.461705, OUTSIDE BOUNDS!
+XYZ[77]: (0.034736 0.004562 -0.341517), length = 0.343309, OUTSIDE BOUNDS!
+XYZ[78]: (0.034814 0.032571 -0.223421), length = 0.228451
+XYZ[79]: (0.035809 0.161690 -0.393278), length = 0.426724, OUTSIDE BOUNDS!
+XYZ[80]: (0.037386 0.019087 -0.453139), length = 0.455079, OUTSIDE BOUNDS!
+

@@ -1,0 +1,156 @@
+
+//===================================================
+//	Coding style
+//===================================================
+
+Header files are included from other files.
+They are usually prefixed with h_*
+and have extensions: .hlsl, .fxh
+
+
+Source files are translation units, they contain
+GPU resources and programs (shaders).
+Prefixes: p_* (programs), r_* (resources),
+Extensions: .fx .
+
+
+//===================================================
+//	To do
+//===================================================
+
+preserve comments, put them in generated C++ code.
+
+
+1) don't create a new (esp. very small, several bytes) constant buffer for each shader,
+identify common variables, merge CBs, give warning if the same CB is bound to several slots.
+
+2) support for shader libraries in DLLs:
+
+struct DLL_IMPORT Shader { //...
+
+
+3) support for shader obfuscation
+(mangle names of CB variables to keep compiled shader bytecode from prying eyes)
+
+
+4) static members can be anywhere in memory (bad for cache),
+use stack for lightweight shaders:
+
+struct Shader1
+{
+public:
+	static cbData1 data;
+};
+
+struct Shader2
+{
+public:
+	cbData2 data;
+};
+
+
+5) split code generator into separate, standalone modules,
+each responsible for:
+	- vertex format declarations / input layouts
+	- render targets and states
+	- shader programs
+	.
+
+6) don't use strings/filenames for loading and identifying shaders.
+(it's convenient to keep shader source code in separate files during development though.)
+
+7) perform global optimizations, e.g. describe the rendering pipeline and generate optimal rendering code:
+
+this is a sketch only...
+
+/*
+=============================================================================
+	File:	deferred.pipeline
+	Desc:	Deferred graphics pipeline description.
+	ToDo:	separate resources from shaders;
+			load shaders first, then load resources (render targets, input layouts, states, etc).
+=============================================================================
+*/
+settings
+{
+	BuildDir	"R:/_/Shaders/"
+}
+setup
+{
+	files
+	{
+		"i_render_targets.inl"
+		"i_render_states.inl"
+
+		// programs
+		"p_debug.fx"
+		"p_test.fx"
+		
+		"p_sprite_text.fx"
+		
+		"p_fill_buffers.fx"
+		"p_translucency.fx"
+		
+		"p_directional_light.fx"
+		"p_point_light.fx"
+		
+	//	"p_wireframe.fx"
+	
+	
+	//	"p_stable_file.fx"	+stable
+		
+		// input layouts
+		"i_vertex_formats.inl"
+	}
+}
+
+render	
+{
+	pass GBuffer
+	{
+		target	RT0
+		state	fill_buffers
+		shader	fill_buffers
+		clear_depth		1.0f
+		clear_stencil	0
+		
+		filter	Solid
+		sort	FrontToBack,ByMaterial
+	}
+}
+
+
+
+also, the same thing for materials (high-level shaders, surface descriptors, etc.):
+
+fragment PointLight_Phong
+{
+	inputs {
+		float3	eyePos;
+		float3	lightPos;
+		// etc.
+	}
+	outputs {
+		float3	pixelColor;
+		// etc.
+	}
+	code {
+		//...
+	}
+}
+
+// material inheritance
+material material_metal : material_microfaceted
+{
+	{
+		// highest priority material goes here
+	}
+	{
+		// lower priority material goes here
+	}
+	{
+		// fallback material goes here
+	}
+}
+
+

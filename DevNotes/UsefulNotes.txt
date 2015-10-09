@@ -1,0 +1,36 @@
+Code-search sites include:
+
+Google Code Search -  www.google.com/codesearch - A search for "include" finds 809,000 C++ files and 4 million C files. Google is mistakenly classifying at least some C++ code as C code. For example, some Boost code is classified as C code. No apparent way to exclude comments from search.
+
+codesearch.net - csourcesearch.net - 283 million lines of C/C++ code in 1.1 million files. Searches do not yield total hit counts, making the site less useful than it might otherwise be.
+
+koders - www.koders.com - Claims 424 million lines of code, but doesn't appear to have as much C/C++ code as others. No apparent way to exclude comments from search.
+
+krugle - www.krugle.com - Appears to have 1,388,870 files classified as C++ code. Allows comments to be excluded from search.
+
+
+
+* Visual Studio, debug output panel, go to file/line on mouse click
+
+	Visual Studio understands it if you write in format:
+
+	"%s(%d,%d): %s", fileNameStr, lineNum, columnNum, messageStr
+
+	e.g.
+
+	R:/test.fx(8,1): Syntax error: EOF expected
+
+	you can double-click on it and go that location
+
+
+
+
+standart weapon animations:
+ idle 
+ idle_aim 
+ idle_sprint 
+ shoot 
+ draw 
+ holster 
+ reload
+ 

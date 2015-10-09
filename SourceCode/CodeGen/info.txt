@@ -1,0 +1,3 @@
+CodeGen - automatically generated code.
+
+(resource GUIDs, class ids, embedded bitmaps, etc.)

@@ -1,0 +1,11 @@
+WASD - movement
+
+Key_O - g_cvar_clip_player_movement
+Key_P - g_cvar_tick_physics_world
+
+Key_F6	QuickSaveGame
+Key_F9	LoadSavedGame
+
+
++	Increase gravity
+-	Decrease gravity

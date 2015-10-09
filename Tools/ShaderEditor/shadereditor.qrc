@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="ShaderEditor"/>
+  <qresource prefix="images">
+    <file>Resources/directx.ico</file>
+  </qresource>
+</RCC>

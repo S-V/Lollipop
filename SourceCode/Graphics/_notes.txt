@@ -1,0 +1,2793 @@
+Point and Spot lights that do not cross camera's near plane are rendered as 3D shapes, with Z buffer test against scene enabled. This makes partially or fully occluded Point and Spot lights very cheap to render. Directional lights and Point/Spot lights that cross the near plane are rendered as fullscreen quads.
+
+* add comment:
+At runtime, load all shaders first, then load only 
+the necessary vertex buffers, index buffers, and 
+textures.
+
+from a single shader source file multiple shaders (shader variations) can be compiled.
+they are identified with a 16-bit key (unsigned integer number),
+(tells which defines are toggled).
+each shader has a unique 16-bit number.
+each shader in a cache is indexed with 32-bit number ((shaderNum<<16) |shaderVariation).
+
+vertex shaders are fixed, i.e. there are no vertex uber-shaders,
+only pixel shaders variations exist.
+
+
+TSerializer< TYPE >	serializer;
+			Do_ForAll( serializer );
+
+	// should be called before rendering
+	inline void UpdateShaderConstants( const rxRenderView& view )
+
+	
+//
+//	EGfxPipelineStage
+//
+enum EGfxPipelineStage
+{
+	RS_Prepare = 0,
+
+	RS_FillGBuffer,			// geometry stage, draw opaque surfaces only
+	RS_ApplyLighting,		// lighting stage
+	RS_DrawTranslucent,		// alpha stage
+
+	RS_FinalCombine,
+
+	RS_ApplyPostFx,			// post-processing
+
+	RS_DrawHUD,				// user interface
+
+	RS_DrawDebugData,		// performance HUD, debug texts
+};
+
+
+	for( UINT iMaterial = 0; iMaterial < GetMaxCapacity(); iMaterial++ )
+	{
+		rxMaterial * material = GetPtrByIndex( iMaterial );
+
+		while( material )
+			;
+	}
+
+	#ifdef __linux__
+unsigned _rotl ( unsigned val, int shift)
+{
+    register unsigned hibit;        /* non-zero means hi bit set */
+    register unsigned num = val;    /* number to rotate */
+
+    shift &= 0x1f;                  /* modulo 32 -- this will also make
+                                       negative shifts work */
+    while (shift--) {
+        hibit = num & 0x80000000;   /* get high bit */
+        num <<= 1;                  /* shift left one bit */
+        if (hibit)
+            num |= 1;               /* set lo bit if hi bit was set */
+    }
+
+    return num;
+}
+#endif
+
+/*
+===============
+FastChecksum
+===============
+*/
+
+int FastChecksum(char *buffer, int bytes)
+{
+   int   checksum = 0;
+
+   while( bytes-- )
+   {
+      checksum = _rotl(checksum, 4) ^ *(char *)buffer;
+      buffer++;
+   }
+
+   return checksum;
+}
+
+#if 0
+
+	//////////////////////////////// Phong model /////////////////////////////////////
+	// - Phong model has good properties for plastic and some metallic surfaces. 
+	// - Good for general use. Very cheap.
+
+	/*
+		N - surface normal
+		V - eye vector (vector from the surface point to the camera position)
+		L - light vector (vector from the surface point to the light source)
+		Exp - specular exponent
+	*/
+	half Phong(half3 N, half3 V, half3 L, half Exp)
+	{
+		half3 R = reflect(-L, N);					// 3 ALU
+		return pow( saturate( dot(V, R) ), Exp);	// 4
+		// 7 ALU
+	}
+#endif
+	// Holds generic input for BRDFs (directions and colors)
+// All directions are normalized and in world space
+struct BRDFIn
+{
+    float3 N;       // surfacce normal
+    float3 T;       // primary tangent
+    float3 B;       // secondary tangent 'binormal'
+    float3 L;       // vector to light source
+    float3 V;       // vector to viewer
+    float3 H;       // halfway vector
+    
+    float3 C_d;     // diffuse/material color
+    float3 C_s;     // specular color (if model supports it)
+    float3 C_e;     // color of perfect specular reflection (sampled from EnvMap)
+    float3 I_d;     // intensity of directional light
+    float3 I_a;     // intensity of ambient light
+    
+    float4 Params;  // some BRDF-specific params that can be sampled from textures
+};
+
+/*
+	N - surface normal
+	V - vector to viewer, eye vector (normalized vector from the surface point to the camera position)
+	L - vector to light source, light vector (normalized vector from the surface point to the light source)
+	specularPower - specular exponent, shininess (Phong exponent)
+*/
+float3 Phong_Specular(
+	in float3 N, in float3 L, in float3 V,
+	in float3 diffuseColor, in float3 specularColor, in float specularPower
+	)
+{
+	float NdotL = saturate(dot(N,L));
+	float3 R = reflect(-L, N);
+	float RdotL = saturate(dot(V,R));
+
+	float3 diffuseLighting = NdotL;
+	float3 specularLighting = pow(RdotL,specularPower);
+	
+	return diffuseColor * diffuseLighting + specularColor * specularLighting;
+}
+
+float PointLightAttenuation( in float NdotL, in float distance, in float invRadius )
+{
+	float attenuation = saturate( 1.0f - distance * invRadius ) * NdotL;
+	return attenuation;
+}
+	
+	
+	//---------------------------------------------------------------
+//		Common stuff for rendering light sources.
+//---------------------------------------------------------------
+
+DECLARE_CB( cbDynamicLight, 5 )
+{
+	float3	diffuseColor PACK( c0 );
+	float1	invRange PACK( c0.w );		// inverse of range of influence
+	float3	origin PACK( c1 );			// [local lights only] in view space (cone apex in view space for spotlights)
+	float3	lightVector PACK( c1 );		// [directional lights only] normalized lightVector in view space ( light vector = -1 * direction )
+	float4	specularColor PACK( c2 );
+	float1	cosTheta;		// cosine of half inner cone angle
+	float3	direction;		// normalized axis direction in view space
+	float1	cosPhi;			// cosine of half outer cone angle
+	float3	specularColor;
+	float1	range;
+	float4x4	worldViewProj;	// for transforming unit light shape
+};
+DECLARE_CB( cbPointLight, 5 )
+{
+	float3		diffuseColor;
+	float1		invRadius;
+	float3		origin;			// in view space
+	float1		radius;
+	float3		specularColor;
+	float1		_pad0;
+	float4x4	worldViewProj;	// for transforming unit light shape
+	// 76 bytes
+};
+DECLARE_CB( cbSpotLight, 5 )
+{
+	float3		diffuseColor;
+	float1		invRange;		// inverse of range of influence
+	float3		origin;			// cone apex in view space
+	float1		cosTheta;		// cosine of half inner cone angle
+	float3		direction;		// normalized axis direction in view space
+	float1		cosPhi;			// cosine of half outer cone angle
+	float3		specularColor;
+	float1		range;
+	float4x4	worldViewProj;	// for transforming unit light shape
+	// 128 bytes
+};
+
+	
+	// calls destructors, deletes each element
+	void DeletePointers()
+	{
+		const UINT num = GetSize();
+		for( UINT i = 0; i < num; i++ ) {
+			free_one( mData[i] );
+		}
+	}
+
+/*
+		Vec4D pointH( batchCenter, 1.0f );
+		pointH *= view.viewProjectionMatrix;
+		//FLOAT depth = maxf( pointH.z - batch.bounds.GetRadius(), 0.0f );
+		FLOAT depth = pointH.z * mxReciprocalEst( pointH.w );
+*/
+
+
+/*
+		D3DX11_IMAGE_INFO SrcInfo;
+		D3DX11GetImageInfoFromFile( pTextureFilename, NULL, &SrcInfo, NULL );
+*/
+		D3DX11_IMAGE_LOAD_INFO dili;
+        dili.BindFlags = D3DX11_DEFAULT;
+        dili.CpuAccessFlags = D3DX11_DEFAULT;
+        dili.Depth = D3DX11_DEFAULT;
+        dili.Filter = D3DX11_DEFAULT;
+        dili.FirstMipLevel = 0;
+        dili.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dili.Height = D3DX11_DEFAULT;
+        dili.MipFilter = D3DX11_DEFAULT;
+        dili.MipLevels = 1;
+        dili.MiscFlags = D3DX11_DEFAULT;
+        dili.pSrcInfo = 0;//&SrcInfo;
+        dili.Usage = D3D11_USAGE_DEFAULT ;
+        dili.Width = D3DX11_DEFAULT;
+		
+
+	if(0)
+	{
+		imgLoadInfo.Width			= D3DX11_DEFAULT;
+		imgLoadInfo.Height			= D3DX11_DEFAULT;
+		imgLoadInfo.Depth			= D3DX11_DEFAULT;
+		imgLoadInfo.FirstMipLevel	= D3DX11_DEFAULT;
+		imgLoadInfo.MipLevels		= D3DX11_DEFAULT;
+		imgLoadInfo.Usage			= (D3D11_USAGE) D3DX11_DEFAULT;
+		imgLoadInfo.BindFlags		= D3DX11_DEFAULT;
+		imgLoadInfo.CpuAccessFlags	= D3DX11_DEFAULT;
+		imgLoadInfo.MiscFlags		= D3DX11_DEFAULT;
+		imgLoadInfo.Format			= DXGI_FORMAT_FROM_FILE;
+		imgLoadInfo.Filter			= D3DX11_FILTER_TRIANGLE;
+		imgLoadInfo.MipFilter		= D3DX11_FILTER_TRIANGLE;
+		imgLoadInfo.pSrcInfo		= NULL;
+	} else {
+	
+	
+	
+
+	String * vertexShaderName = nil,
+	String * pixelShaderName = nil,
+	String * geometryShaderName = nil
+	
+	do {
+		end = lexer.GetFileOffset();
+		if( !lexer.ReadToken( &token ) ) {
+			break;
+		}
+		if( token.type == TT_PUNCTUATION ) {
+			if ( token.ToChar()[0] == '{' ) {
+				braceDepth++;
+			} else if ( token.ToChar()[0] == '}' ) {
+				braceDepth--;
+			}
+			if( token.ToChar()[0] == '$' ) {
+				const char * sectionOffset = source + lexer.GetFileOffset();
+				idToken	meaning;
+				lexer.ReadToken( &meaning );
+				if( 0 == meaning.Icmpn("VertexShader",sizeof("VertexShader")) )
+				{
+					MemSet( (char*)sectionOffset, ' ', sizeof("$VertexShader") );
+					if ( vertexShaderName ) {
+						*vertexShaderName = ;
+					}
+					continue;
+				}
+				else
+				if( 0 == meaning.Icmpn("PixelShader",sizeof("PixelShader")) )
+				{
+					MemSet( (char*)sectionOffset, ' ', sizeof("$PixelShader") );
+					continue;
+				}
+				else
+				if( 0 == meaning.Icmpn("GeometryShader",sizeof("GeometryShader")) )
+				{
+					MemSet( (char*)sectionOffset, ' ', sizeof("$GeometryShader") );
+					continue;
+				}
+				else {
+					ParseError("Invalid semantic: %s.\n",meaning);
+				}
+			}
+		}
+	} while( braceDepth );
+		
+		
+		
+		
+		
+			MaterialMap::Iterator iter( mMaterialsByName );
+	while( iter )
+	{
+		free_one( iter.Value() );
+		++iter;
+	}
+	mMaterialsByName.Clear();
+		
+		
+		
+		
+#include "RF.h"
+#pragma hdrstop
+
+struct CB_vs_data {
+	Matrix4	wvp;
+};
+	
+struct Globals
+{
+	CB_vs_data	cb_vs_data;	
+};
+
+static Globals	gVars;
+
+void TestScene_Init()
+{
+	FLOAT sizeX = 100.0f;
+	FLOAT sizeZ = 100.0f;
+	FLOAT height = 0.0f;
+
+	// Create vertex buffer.
+
+	enum { NUM_VERTICES = 24 };
+
+	rxVertex_Csg vertices[ NUM_VERTICES ] =
+	{
+		{ Vec3D(-sizeX,height,-sizeZ), Vec2D(0.0f,1.0f), Vec2D(1.0f,0.0f), Vec2D(0.0f,1.0f) },	// lower left
+		{ Vec3D(-sizeX,height,+sizeZ), Vec2D(0.0f,1.0f), Vec2D(1.0f,0.0f), Vec2D(0.0f,0.0f) },	// upper left
+		{ Vec3D(+sizeX,height,+sizeZ), Vec2D(0.0f,1.0f), Vec2D(1.0f,0.0f), Vec2D(1.0f,0.0f) },	// upper right
+		{ Vec3D(+sizeX,height,-sizeZ), Vec2D(0.0f,1.0f), Vec2D(1.0f,0.0f), Vec2D(1.0f,1.0f) },	// lower right
+	};
+
+	rxCsgModelDesc	desc;
+	desc.verts = vertices;
+	desc.numVerts = 4;
+
+//	rxCsgModel * mdl = renderer->resourceMgr.NewCsgModel(desc);
+
+
+
+	class MyRenderStage : public RenderStage
+	{
+		dxPtr< ID3D11InputLayout >		inputLayout;
+		dxPtr< ID3D11VertexShader >		vertexShader;
+		dxPtr< ID3D11PixelShader >		pixelShader;
+		
+		dxPtr< ID3D11Buffer >	VB;
+		dxPtr< ID3D11Buffer >	IB;
+		
+		dxPtr< ID3D11Buffer >	vs_const_buffer;
+
+	public:
+		MyRenderStage()
+		{
+			URI test_vsh("R:/shader_test/test.vsh");
+			URI test_gsh("R:/shader_test/test.gsh");
+			URI test_psh("R:/shader_test/test.psh");
+
+			dxPtr< ID3DBlob >	vsByteCode;
+
+			vertexShader = dxCreateVertexShaderFromFile( test_vsh.ToChar(), "mainVS", &vsByteCode.Ptr );
+			pixelShader = dxCreatePixelShaderFromFile( test_psh.ToChar(), "mainPS" );
+
+
+
+
+			// Create the Const Buffer
+
+			D3D11_BUFFER_DESC constant_buffer_desc;
+			ZERO_OUT(constant_buffer_desc);
+			constant_buffer_desc.ByteWidth = sizeof(CB_vs_data);
+			constant_buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+			constant_buffer_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+			constant_buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+			dxchk(gRenderer->device->CreateBuffer( &constant_buffer_desc, NULL, &vs_const_buffer.Ptr ));
+			dxSetDebugName( vs_const_buffer, "vs_const_buffer" );
+
+
+
+
+			// Create our vertex input layout
+
+			const D3D11_INPUT_ELEMENT_DESC layout[] =
+			{
+				{ "POSITION",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				//	{ "NORMAL",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+				//	{ "TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			};
+
+			dxchk( gRenderer->device->CreateInputLayout(
+				layout, ARRAY_SIZE( layout ),
+				vsByteCode->GetBufferPointer(),
+				vsByteCode->GetBufferSize(),
+				&inputLayout.Ptr
+				));
+			dxSetDebugName( inputLayout, "Primary" );
+
+			// Create vertex buffer
+			{
+				FLOAT sizeX = 100.0f;
+				FLOAT sizeZ = 100.0f;
+				FLOAT height = 0.0f;
+
+				Vec3D verts[3] = {
+					Vec3D(-sizeX,height,-sizeZ),	// lower left
+					Vec3D(-sizeX,height,+sizeZ),	// upper left
+					Vec3D(+sizeX,height,+sizeZ),	// upper right
+					//	Vec3D(+sizeX,height,-sizeZ),	// lower right
+				};
+
+				FLOAT size = 10;
+				verts[0].Set(-size,-size,0);
+				verts[1].Set(-size,+size,0);
+				verts[2].Set(+size,+size,0);
+
+
+				verts[0].Set( 0.0f, 0.5f, 0.5f );
+				verts[1].Set( 0.5f, -0.5f, 0.5f );
+				verts[2].Set( -0.5f, -0.5f, 0.5f );
+
+
+				verts[0].Set(0.0f,size,+size);
+				verts[1].Set(size,-size,+size);
+				verts[2].Set(-size,-size,+size);
+
+
+				D3D11_BUFFER_DESC bufferDesc;
+				ZERO_OUT(bufferDesc);
+				bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+				bufferDesc.Usage = D3D11_USAGE_DEFAULT; // Not a dynamic buffer
+				bufferDesc.ByteWidth = sizeof(verts); // Buffer size
+				bufferDesc.CPUAccessFlags = 0;   // Indicates that CPU won't access this buffer at all after creation
+				bufferDesc.MiscFlags = 0;
+				bufferDesc.StructureByteStride = 0;
+
+				D3D11_SUBRESOURCE_DATA initData; // Initial data
+				ZERO_OUT(initData);
+				initData.pSysMem = verts;   
+				dxchk(gRenderer->device->CreateBuffer( &bufferDesc, &initData, &VB.Ptr ));
+				dxSetDebugName( VB, "VB" );
+			}
+
+			{
+				UINT16 indices[3] = {0,1,2};
+				D3D11_BUFFER_DESC bufferDesc;
+				ZERO_OUT(bufferDesc);
+				bufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+				bufferDesc.Usage = D3D11_USAGE_DEFAULT; // Not a dynamic buffer
+				bufferDesc.ByteWidth = sizeof(indices); // Buffer size
+				bufferDesc.CPUAccessFlags = 0;   // Indicates that CPU won't access this buffer at all after creation
+				bufferDesc.MiscFlags = 0;
+				bufferDesc.StructureByteStride = 0;
+
+				D3D11_SUBRESOURCE_DATA initData; // Initial data
+				ZERO_OUT(initData);
+				initData.pSysMem = indices;
+				dxchk(gRenderer->device->CreateBuffer( &bufferDesc, &initData, &IB.Ptr ));
+				dxSetDebugName( IB, "IB" );
+			}
+		}
+
+		virtual ~MyRenderStage()
+		{
+		}
+
+		virtual void Render( const RenderView& view, Renderer& renderer )
+		{
+			Matrix4	worldMatrix(Matrix4::mat4_identity);
+			Matrix4	viewMatrix(Matrix4::mat4_identity);
+			Matrix4	projMatrix(Matrix4::mat4_identity);
+			
+			viewMatrix.BuildView(
+				Vec3D(0,10,-5),Vec3D(0,0,0)
+			);
+			
+			FLOAT aspect = (FLOAT)renderer.viewportWidth / (FLOAT)renderer.viewportHeight;
+			projMatrix.BuildPerspectiveLH(
+				DEG2RAD(90.0f),
+				aspect,
+				1.0f,100.0f
+			);
+			
+			Matrix4	wvp(worldMatrix*viewMatrix*projMatrix);
+			wvp.SetIdentity();
+		
+			// Per frame cb update
+			{
+				D3D11_MAPPED_SUBRESOURCE MappedResource;
+	
+				dxchk( renderer.immediateContext->Map(
+						vs_const_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource ) );
+	
+				CB_vs_data* pCB = ( CB_vs_data* )MappedResource.pData;
+	
+				MemCopy( &pCB->wvp, &wvp, sizeof(wvp) );
+	
+				renderer.immediateContext->Unmap( vs_const_buffer, 0 );
+			}
+			
+			//renderer.immediateContext->UpdateSubresource(
+			//	vs_const_buffer,	// ID3D11Resource *pDstResource
+			//	0,	// UINT DstSubresource
+			//	nil,	// const D3D11_BOX *pDstBox
+			//	&wvp,	// const void *pSrcData
+			//	0,	// UINT SrcRowPitch
+			//	0	// UINT SrcDepthPitch
+			//);
+
+
+
+
+		//	renderer.immediateContext->VSSetConstantBuffers( 0, 1, &vs_const_buffer.Ptr );
+		//	renderer.immediateContext->PSSetConstantBuffers( 0, 1, &vs_const_buffer.Ptr );
+
+
+		//	renderer.SetVertexShader(vertexShader);
+		//	renderer.SetPixelShader(pixelShader);
+			renderer.immediateContext->VSSetShader(
+				vertexShader,
+				nil,	// ID3D11ClassInstance**
+				0	// NumClassInstances
+			);
+			renderer.immediateContext->PSSetShader(
+				pixelShader,
+				nil,	// ID3D11ClassInstance**
+				0	// NumClassInstances
+			);
+
+			renderer.immediateContext->IASetInputLayout( inputLayout );
+			renderer.immediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			
+			{
+				UINT Strides[1];
+				UINT Offsets[1];
+				ID3D11Buffer* pVB[1];
+				pVB[0] = VB;
+				Strides[0] = sizeof(Vec3D);
+				Offsets[0] = 0;
+				renderer.immediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
+			}
+			{
+			//	renderer.immediateContext->IASetIndexBuffer( IB, DXGI_FORMAT_R16_UINT, 0 );
+			}
+
+			renderer.immediateContext->Draw(3,0);
+			//renderer.immediateContext->DrawIndexed(3,0,0);
+		}
+	};
+
+	gRenderer->pipeline.AddStage(new_one(MyRenderStage));
+}
+
+void CL_ReloadPipeline() {
+	gRenderer->pipeline.Load("R:/shader_test/test.pipeline");
+
+}
+void CL_ReloadShaders() {
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include "RF.h"
+#pragma hdrstop
+
+struct SimpleVertex
+{
+    XMFLOAT3 Pos;
+};
+
+struct CB_vs_data {
+	Matrix4	wvp;
+};
+	
+struct Globals
+{
+	CB_vs_data	cb_vs_data;	
+};
+
+static Globals	gVars;
+
+class MyRenderStage : public RenderStage
+{
+	dxPtr< ID3D11InputLayout >		inputLayout;
+	dxPtr< ID3D11VertexShader >		vertexShader;
+	dxPtr< ID3D11PixelShader >		pixelShader;
+	
+	dxPtr< ID3D11Buffer >	VB;
+	dxPtr< ID3D11Buffer >	IB;
+	
+	dxPtr< ID3D11Buffer >	vs_const_buffer;
+
+public:
+	MyRenderStage()
+	{
+		URI test("R:/shader_test/Tutorial02.fx");
+
+		dxPtr< ID3DBlob >	vsByteCode;
+		vertexShader = dxCreateVertexShaderFromFile( test.ToChar(), "VS", &vsByteCode.Ptr );
+
+		pixelShader = dxCreatePixelShaderFromFile( test.ToChar(), "PS" );
+
+
+		// Create our vertex input layout
+
+		const D3D11_INPUT_ELEMENT_DESC layout[] =
+		{
+			{ "POSITION",  0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0,  D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			//	{ "NORMAL",    0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+			//	{ "TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT,    0, 24, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		};
+
+		dxchk( gRenderer->device->CreateInputLayout(
+			layout, ARRAY_SIZE( layout ),
+			vsByteCode->GetBufferPointer(),
+			vsByteCode->GetBufferSize(),
+			&inputLayout.Ptr
+		));
+		dxSetDebugName( inputLayout, "Primary" );
+
+		// Create vertex buffer
+		{
+			SimpleVertex verts[] =
+			{
+				XMFLOAT3( 0.0f, 0.5f, 0.5f ),
+				XMFLOAT3( 0.5f, -0.5f, 0.5f ),
+				XMFLOAT3( -0.5f, -0.5f, 0.5f ),
+			};
+
+			D3D11_BUFFER_DESC bufferDesc;
+			ZERO_OUT(bufferDesc);
+			bufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+			bufferDesc.Usage = D3D11_USAGE_DEFAULT; // Not a dynamic buffer
+			bufferDesc.ByteWidth = sizeof(verts); // Buffer size
+			bufferDesc.CPUAccessFlags = 0;   // Indicates that CPU won't access this buffer at all after creation
+			bufferDesc.MiscFlags = 0;
+			bufferDesc.StructureByteStride = 0;
+
+			D3D11_SUBRESOURCE_DATA initData; // Initial data
+			ZERO_OUT(initData);
+			initData.pSysMem = verts;   
+			dxchk(gRenderer->device->CreateBuffer( &bufferDesc, &initData, &VB.Ptr ));
+			dxSetDebugName( VB, "VB" );
+		}
+	}
+
+	virtual ~MyRenderStage()
+	{
+	}
+
+	virtual void Render( const RenderView& view, Renderer& renderer )
+	{
+		renderer.immediateContext->OMSetRenderTargets( 1, &renderer.mainRT.pRTV.Ptr, NULL );
+	
+		renderer.SetVertexShader(vertexShader);
+		renderer.SetPixelShader(pixelShader);
+
+		gRenderer->immediateContext->IASetInputLayout( inputLayout );
+		gRenderer->immediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		
+		{
+			UINT Strides[1];
+			UINT Offsets[1];
+			ID3D11Buffer* pVB[1];
+			pVB[0] = VB;
+			Strides[0] = sizeof(SimpleVertex);
+			Offsets[0] = 0;
+			gRenderer->immediateContext->IASetVertexBuffers( 0, 1, pVB, Strides, Offsets );
+		}
+		{
+		//	renderer.immediateContext->IASetIndexBuffer( IB, DXGI_FORMAT_R16_UINT, 0 );
+		}
+
+		renderer.immediateContext->Draw(3,0);
+		//renderer.immediateContext->DrawIndexed(3,0,0);
+	}
+};
+
+void TestScene_Init()
+{
+	gRenderer->pipeline.AddStage(new_one(MyRenderStage));
+}
+
+void CL_ReloadPipeline() {
+	gRenderer->pipeline.Load("R:/shader_test/test.pipeline");
+
+}
+void CL_ReloadShaders() {
+}
+
+
+
+
+
+
+
+
+class dxShaderCache {
+public:
+	enum { MAX_ENTRIES = 2048 };
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+---------------------------------------------------------------------------
+This source file is part of nGENE Tech.
+
+Copyright (c) 2006- Wojciech Toman
+
+This program is free software.
+
+File:		Main.cpp
+Version:	0.02
+Info:		Simple tool for building nGENE archive files.
+---------------------------------------------------------------------------
+*/
+
+#define NOMINMAX
+#include <windows.h>
+#include <tchar.h> 
+#include <stdio.h>
+#include <strsafe.h>
+
+#include "nGENE.h"
+using namespace nGENE;
+
+DefaultFileArchive* pArchive;
+FileManager manager;
+uint nCount;
+
+void traverse(STRSAFE_LPCSTR dir)
+{
+	HANDLE hFind = INVALID_HANDLE_VALUE;
+	DWORD dwError=0;
+	WIN32_FIND_DATA ffd;
+	LARGE_INTEGER filesize;
+	TCHAR szDir[MAX_PATH];
+
+	_tprintf(TEXT("<VISITING DIR>   %s\n"), dir);
+
+	// Prepare string for use with FindFile functions.  First, copy the
+	// string to a buffer, then append '\*' to the directory name.
+
+	StringCchCopy(szDir, MAX_PATH, dir);
+	StringCchCat(szDir, MAX_PATH, TEXT("\\*"));
+
+	// Find the first file in the directory.
+
+	hFind = FindFirstFile(szDir, &ffd);
+
+	if(hFind == INVALID_HANDLE_VALUE)
+		return;
+
+	// List all the files in the directory with some info about them.
+
+	do
+	{
+		if(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			if(strcmp(ffd.cFileName, ".") && strcmp(ffd.cFileName, ".."))
+			{
+				TCHAR szDir[MAX_PATH];
+
+				StringCchCopy(szDir, MAX_PATH, dir);
+				StringCchCat(szDir, MAX_PATH, "/");
+				StringCchCat(szDir, MAX_PATH, ffd.cFileName);
+				traverse(szDir);
+			}
+		}
+		else
+		{
+			filesize.LowPart = ffd.nFileSizeLow;
+			filesize.HighPart = ffd.nFileSizeHigh;
+
+			char szDir[MAX_PATH];
+			char tempDir[MAX_PATH];
+
+			StringCchCopy(tempDir, MAX_PATH, dir);
+			StringCchCat(tempDir, MAX_PATH, "/");
+			StringCchCat(tempDir, MAX_PATH, ffd.cFileName);
+			uint i = 0;
+			char* pointer = tempDir;
+			char c = *pointer;
+			if(c == '.')
+			{
+				++pointer;
+				c = *pointer;
+				if(c == '/' || c == '\\')
+				{
+					++pointer;
+					i += 2;
+				}
+				else
+					--pointer;
+			}
+
+			StringCchCopy(szDir, MAX_PATH - i, pointer);
+
+			string temp(szDir);
+			wstring stName(temp.begin(), temp.end());
+
+			wcout << L"Adding file:" << stName << endl;
+			IFile* pFile = manager.openFile(stName, OPEN_READ | OPEN_BINARY, FT_NORMAL);
+			if(!pFile)
+			{
+				_tprintf(TEXT("\nFile could not be opened for reading.\n"));
+				return;
+			}
+			pArchive->insertFile(pFile);
+			manager.closeFile(stName);
+
+			++nCount;
+		}
+	}
+	while(FindNextFile(hFind, &ffd) != 0);
+
+	dwError = GetLastError();
+	if(dwError != ERROR_NO_MORE_FILES) 
+		return;
+
+	FindClose(hFind);
+}
+
+int main(int argc, char* argv[])
+{
+	_tprintf(TEXT("\nnGENE Archive Builder\n"));
+	_tprintf(TEXT("Wojciech Toman 2009\n\n"));
+
+	size_t length_of_arg;
+	
+
+	// If the directory is not specified as a command-line argument,
+	// print usage.
+
+	if(argc != 3 && argc != 4)
+	{
+		_tprintf(TEXT("\nUsage: %s <directory name> <archive name> [-c OPTIONAL compression]\n"), argv[0]);
+		return (-1);
+	}
+
+	// Read compression flag
+	bool bCompress = false;
+	if(argc == 4)
+	{
+		bCompress = strcmp(argv[3], "-c") ? false : true;
+	}
+
+	string temp(argv[2]);
+	wstring stName(temp.begin(), temp.end());
+	pArchive = (DefaultFileArchive*)manager.openArchive(L"Default", stName.c_str(), OPEN_WRITE | OPEN_BINARY);
+	if(!pArchive)
+	{
+		_tprintf(TEXT("\nArchive file could not be created.\n"));
+		return (-1);
+	}
+
+	// Set compression flag
+	if(bCompress)
+		pArchive->setFlags(DFAF_COMPRESS);
+
+	// Check that the input path plus 3 is not longer than MAX_PATH.
+	// Three characters are for the "\*" plus NULL appended below.
+
+	StringCchLength(argv[1], MAX_PATH, &length_of_arg);
+
+	if (length_of_arg > (MAX_PATH - 3))
+	{
+		_tprintf(TEXT("\nDirectory path is too long.\n"));
+		return (-1);
+	}
+
+	_tprintf(TEXT("\nTarget directory is %s\n\n"), argv[1]);
+
+
+	traverse(argv[1]);
+
+	manager.closeFile(stName);
+
+	_tprintf(TEXT("\nTotal: %d files added to the archive file\n"), nCount);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+//--------------------------------------------------------------//
+static void LoadMap_PlainTextFile( const String& fileName )
+{
+	//if( mxDataStream::Ref inStream = clContentServer::Get().OpenStream(URI( fileName )) )
+	//{
+	//	putf("Loading map: '%s'.\n",fileName.ToChar());
+	//	
+	//}
+	putf("Loading test map.\n");
+}
+//--------------------------------------------------------------//
+void clGame::LoadMap( const String& fileName )
+{
+	String fileExt;
+	fileName.ExtractFileExtension(fileExt);
+	if( fileExt == "txt" ) {
+		LoadMap_PlainTextFile( fileName );
+	} else {
+		mxWarnf("Unsupported file format '%s'.\n",fileExt.ToChar());
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+inline
+void rrFormatInt(
+	ANSICHAR* buffer, SizeT bufferSize,
+	const char* msg,
+	int number
+	)
+{
+	mxSPrintfAnsi( buffer, bufferSize,
+		"%s%d", msg, number );
+};
+
+inline
+void rrFormatFloat(
+	ANSICHAR* buffer, SizeT bufferSize,
+	const char* msg,
+	float f
+	)
+{
+	mxSPrintfAnsi( buffer, bufferSize,
+		"%s%.3f", msg, f );
+};
+
+inline
+void rrFormat(
+	ANSICHAR* buffer, SizeT bufferSize,
+	const char* msg,
+	const Vec2D& vector
+	)
+{
+	mxSPrintfAnsi( buffer, bufferSize,
+		"%s%.3f, %.3f", msg, vector.x, vector.y );
+};
+
+inline
+void rrFormat(
+	ANSICHAR* buffer, SizeT bufferSize,
+	const char* msg,
+	const Vec3D& vector
+	)
+{
+	mxSPrintfAnsi( buffer, bufferSize,
+		"%s%.3f, %.3f, %.3f", msg, vector.x, vector.y, vector.z );
+};
+
+inline
+void rrFormat(
+	ANSICHAR* buffer, SizeT bufferSize,
+	const char* msg,
+	const Matrix4& m
+	)
+{
+	mxSPrintfAnsi( buffer, bufferSize,
+		"%s"
+		"%.6f, %.6f, %.6f, %.6f, "
+		"%.6f, %.6f, %.6f, %.6f, "
+		"%.6f, %.6f, %.6f, %.6f, "
+		"%.6f, %.6f, %.6f, %.6f",
+		msg,
+		m[0][0], m[0][1], m[0][2], m[0][3],
+		m[1][0], m[1][1], m[1][2], m[1][3],
+		m[2][0], m[2][1], m[2][2], m[2][3],
+		m[3][0], m[3][1], m[3][2], m[3][3]
+	);
+};
+
+
+// use this for TFixedString<LENGTH>
+#define RR_FORMAT_FIXED_STRING( fixedString, msg, fmt ) \
+	rrFormat( fixedString.Ptr(), fixedString.GetCapacity(), msg, fmt )
+
+#define RR_FORMAT_FIXED_STRING_INT( fixedString, msg, fmt ) \
+	rrFormatInt( fixedString.Ptr(), fixedString.GetCapacity(), msg, fmt )
+
+#define RR_FORMAT_FIXED_STRING_FLOAT( fixedString, msg, fmt ) \
+	rrFormatFloat( fixedString.Ptr(), fixedString.GetCapacity(), msg, fmt )
+
+
+
+	Vec3D lookDir( mForward );
+
+	lookDir *= mat;
+
+	FLOAT phi = mxACos( lookDir.Dot( WORLD_UP_VECTOR ) );
+
+	if( phi > DEG2RAD(88.0f) ) {
+	}
+	if( phi < DEG2RAD(-88.0f) ) {
+	}
+
+	if(TEST_BIT(cmds, Cmd_MoveForward)) {
+		camera.Walk( walkDist );
+	}
+	if(TEST_BIT(cmds, Cmd_MoveBackward)) {
+		camera.Walk( -walkDist );
+	}
+	if(TEST_BIT(cmds, Cmd_MoveLeft)) {
+		camera.Strafe( -strafeDist );
+	}
+	if(TEST_BIT(cmds, Cmd_MoveRight)) {
+		camera.Strafe( strafeDist );
+	}
+
+	if(TEST_BIT(cmds, Cmd_Duck)) {
+		camera.Fly( -jumpDist );
+	}
+	if(TEST_BIT(cmds, Cmd_Jump)) {
+		camera.Fly( jumpDist );
+	}
+
+	if(TEST_BIT(cmds, Cmd_RotateView))
+	{
+	//	camera.Yaw( DEG2RAD( yaw * rotation ) );
+
+	Matrix4	m;
+	m.SetRotationInDegrees(Vec3D(yaw* rotation*0.01,pitch* rotation*0.01,0.0f));
+//	m = AxMatrixRotationYawPitchRoll(0,DEG2RAD(pitch* rotation*0.01),DEG2RAD(yaw* rotation*0.01));
+	XMVECTOR	vv;
+	vv = XMVectorSet(pitch* rotation*0.01,yaw* rotation*0.01,0.0f,0.0f);
+	XMMATRIX mm = XMMatrixRotationRollPitchYawFromVector(vv);
+
+	MemCopy(&m,&mm,sizeof(mm));
+
+	camera.Direction()=m.TransformNormal(camera.Direction());
+	camera.Right()=m.TransformNormal(camera.Right());
+
+		//pitch += deltaPitch;
+		//if( pitch > 45 ) {
+		//	pitch = 45;
+		//} else {
+		//camera.Pitch( DEG2RAD( deltaPitch * rotation ) );
+		//}
+		//pitch = 0.0f;
+	}
+printf("pitch %f\n",pitch );
+//	yaw *= 0.8f * deltaSeconds;
+//	deltaPitch *= 0.8f * deltaSeconds;
+//yaw = 0.0f;
+//pitch = 0.0f;
+
+
+//	m = AxMatrixRotationYawPitchRoll(0,DEG2RAD(pitch* deltaSeconds),DEG2RAD(yaw* deltaSeconds));
+
+//Vec3D	v0(camera.Direction());
+
+
+//	m.TransformNormal(camera.Right());
+//	m.TransformNormal(camera.UpDirection());
+//	camera.Direction().NormalizeFast();
+
+//	Assert(v0!=camera.Direction()
+
+printf("Direction %f %f %f\n",camera.Direction().x,camera.Direction().y,camera.Direction().z );
+
+//	camera.Right() = camera.UpDirection().Cross( camera.Direction() );
+//	camera.Right().Normalize();
+
+	camera.Direction().Normalize();
+	camera.Right() = Vec3D(0,1,0).Cross( camera.Direction() );
+	camera.Right().Normalize();
+
+//	camera.RepairNormals();
+
+	cmds = 0;
+}
+
+	
+	
+/*
+=============================================================================
+	File:	client_render.h
+	Desc:
+=============================================================================
+*/
+
+#ifndef __CLIENT_RENDER_H__
+#define __CLIENT_RENDER_H__
+
+// graphics view
+//
+class RenderView {
+public:
+/*
+	rxViewFrustum	frustum;
+	Matrix4 		viewMatrix;
+	Matrix4  		projectionMatrix;
+	Matrix4  		viewProjectionMatrix;
+	Matrix4  		inverseViewMatrix;
+	Matrix4  		inverseViewProjectionMatrix;
+//	Matrix4  		inverseViewProjectionMatrix_Tex2Clip;
+	Matrix4  		inverseProjectionMatrix;
+
+	Vec3D			eyePosition;
+	FLOAT			farZ;
+	Vec3D			lookDirection;		// normalized look direction
+	FLOAT			invFarZ;			// 1.0f / farZ
+	Vec3D			rightVector;
+	FLOAT			_pad0;
+	Vec3D			upVector;
+*/
+public:
+	INLINE RenderView( const rxSceneView& view )
+	{
+//		Assert( view.IsOk() );
+/*
+		viewMatrix.BuildLookAtMatrixLH(
+			view.mOrigin,
+			view.GetRight(),
+			view.GetUp(),
+			view.GetLookDirection()
+		);
+		projectionMatrix.BuildPerspectiveLH(
+			view.fovY,
+			view.aspect,
+			view.nearZ,
+			view.farZ
+		);
+
+		viewProjectionMatrix = viewMatrix * projectionMatrix;
+	
+		frustum.ExtractFrustumPlanes( viewProjectionMatrix );
+
+		//inverseViewMatrix = viewMatrix.Inverse();
+		inverseViewMatrix = Matrix4(
+			Vec4D( view.viewAxes[ VA_Right ],	0.0f ),
+			Vec4D( view.viewAxes[ VA_Up ],		0.0f ),
+			Vec4D( view.viewAxes[ VA_LookAt ],	0.0f ),
+			Vec4D( view.mOrigin,				1.0f )
+		);
+
+		inverseViewProjectionMatrix = viewProjectionMatrix.Inverse();
+
+		// inverseViewProjectionMatrix_Tex2Clip is used to extract world-space position
+		// from normalized view-space depth (taken from scene depth texture)
+	//	inverseViewProjectionMatrix_Tex2Clip = Transform_Tex2Clip * inverseViewProjectionMatrix;
+
+		inverseProjectionMatrix = projectionMatrix.Inverse();
+
+		eyePosition 	= view.mOrigin;
+		farZ			= view.farZ;
+		lookDirection	= view.GetLookDirection();
+		invFarZ			= 1.0f / farZ;
+		rightVector		= view.GetRight();
+		upVector		= view.GetUp();
+*/
+	}
+/*
+	// computes normalized view-space depth of the given point
+	//
+	INLINE FLOAT CalculateDepth( const Vec3D& point ) const
+	{
+		Vec4D pointH( point, 1.0f );
+		pointH *= this->viewProjectionMatrix;
+		FLOAT invW = 1.0f / pointH.w;
+		return pointH.z * invW;
+	}
+
+	FORCEINLINE const Vec3D & GetOrigin() const
+	{
+		return eyePosition;
+	}
+*/
+};
+
+//struct Surface
+//{
+//	clMaterial *		material;
+//	dxModel *			model;			// geometry + transform
+//	dxModelSurface		surfaceData;
+//};
+
+//
+// part of mesh with a single material
+//
+struct Surface
+{
+	rxMeshChunk	meshPart;
+};
+
+class clModel
+{
+public:
+	Matrix4		localToWorld;	// local-to-world transform
+	rxMesh		geometry;
+};
+/*
+=======================================================================
+
+	Render model
+
+=======================================================================
+*/
+
+// enumerates kinds of render entities
+//
+enum ERenderEntity
+{
+	RE_UNKNOWN = 0,
+	RE_MODEL,
+	RE_LIGHT,
+};
+
+// graphics model (geometry, transform and material)
+//
+//class rxModel {
+//public:
+//	rxBounds		bounds;	// for view frustum culling
+//
+//	TPtr< rxMesh >				mesh;
+//	TBuffer< rxModelSurface >	surfaces;
+//
+//public:
+//	rxModel()
+//	{}
+//};
+
+class rxModelServer {
+public:
+};
+
+/*
+=======================================================================
+	
+		Constructive Solid Geometry.
+
+=======================================================================
+*/
+/*
+=======================================================================
+	File:	CSG.h
+	Desc:	This module contains all defines, typedefs, and prototypes
+			for constructive solid geometry.
+=======================================================================
+*/
+/*
+=======================================================================
+	File:	CSG.cpp
+	Desc:	This module implements routines for constructive solid geometry.
+=======================================================================
+*/
+// enumerates kinds of CSG operations
+//
+enum ECsgOp {
+	CsgOp_Subtract,	// difference
+	CsgOp_Add,		// union
+};
+
+// vertex used for csg models
+//
+struct rxVertex_Csg
+{
+	Vec3D	xyz;		// 12 position
+	Vec2D	normal;		// 8  z = sqrt(1-x*x-y*y)
+	Vec2D	tangent;	// 8  z = sqrt(1-x*x-y*y)
+	Vec2D	uv;			// 8  texture coordinates
+
+	// 12+8+8+8 = 36 bytes
+};
+
+// Maximum number of vertices a polygon can have.
+enum {
+	MAX_FACE_POINTS = 64
+};
+
+struct rxCsgModelDesc
+{
+	rxVertex_Csg *	verts;
+	UINT		numVerts;
+};
+
+class rxCsgModel {
+public:
+};
+
+/*
+=======================================================================
+
+	Dynamic lights
+
+=======================================================================
+*/
+class rxLight {
+public:
+	rxBounds		bounds;	// for view frustum culling
+};
+
+/*
+=======================================================================
+
+	Render queue
+
+=======================================================================
+*/
+
+//
+// EDrawOrder - enumerates render queue priorities assigned to materials.
+//
+enum EDrawOrder
+{
+	DO_BACKGROUND = 0,	// skyboxes, backgrounds representing distant scenery, environments, etc
+
+	DO_GUI,			// GUI surfaces
+
+	DO_PRE,			// for post-processing effects that need to be rendered before normal scene objects
+
+	DO_OPAQUE,		// fully opaque geometry
+
+	DO_NORMAL,		// normal scene objects
+
+	DO_DECALS,		// scorch marks, bullet hits, explosion marks, etc
+	DO_TRANSPARENT,	// alpha-blended surfaces
+
+	DO_PORTAL,		// portal surfaces
+
+	DO_NEAREST,		// weapons, smoke puffs, etc
+	DO_POST_PROCESS,
+
+	DO_LAST,
+};
+
+struct rxRenderQueueEntry
+{
+	TEnum< ERenderEntity, UINT >	type;
+};
+
+class rxRenderQueue {
+public:
+	INLINE rxRenderQueue()
+	{}
+	INLINE ~rxRenderQueue()
+	{}
+
+public:
+	TBuffer< rxRenderQueueEntry >	items;
+};
+
+/*
+=======================================================================
+	
+	Graphics pipeline
+
+=======================================================================
+*/
+
+//
+//	RenderStage - is a part of render pipeline
+//	with specific rendering functionality (single responcibility).
+//
+class RenderStage : public ReferenceCounted {
+public:
+	virtual void Render( const rxSceneView& sceneView ) = 0;
+
+protected:
+	virtual ~RenderStage();
+};
+
+//
+//	Pipeline - graphics pipeline, consists of render stages,
+//	calls them in order to perform rendering.
+//	(Guarantees ordered rendering.)
+//
+class Pipeline : public TSingleton< Pipeline > {
+public:
+	Pipeline();
+	~Pipeline();
+
+	void Render( const rxSceneView& sceneView );
+
+	void AddStage( RenderStage* newStage );
+
+private:
+	TBuffer< RenderStage* >	stages;
+};
+
+class clRenderer : public TSingleton< clRenderer > {
+public:
+	clRenderer();
+	~clRenderer();
+
+	void Render( const rxSceneView& sceneView );
+};
+
+#endif // !__CLIENT_RENDER_H__
+
+//--------------------------------------------------------------//
+//				End Of File.									//
+//--------------------------------------------------------------//
+
+
+
+
+
+
+
+		//if( inputEvent.Type == EInputEvent::InputEvent_Mouse )
+		//{
+		//	if( inputEvent.Mouse.Type == mxMouseEvent::LeftButton_PressedDown )
+		//	{
+		//	}
+		//	if( inputEvent.Mouse.Type == mxMouseEvent::RightButton_PressedDown )
+		//	{
+		//	}
+		//}
+		
+			for( UINT iModel = 0; iModel < models.Num(); iModel++ )
+	{
+		models[ iModel ]->Tick( deltaSeconds );
+	}
+	
+	// XMVectorSet causes
+//	First-chance exception at 0x00f27340 in test_game.exe: 0xC0000005: Access violation reading location 0xffffffff.
+//Unhandled exception at 0x00f27340 in test_game.exe: 0xC0000005: Access violation reading location 0xffffffff.
+
+struct rxAABB
+{
+	MX_ALIGN_16( vec4	min );
+	MX_ALIGN_16( vec4	max );
+
+public:
+	FORCEINLINE rxAABB()
+	{}
+
+	FORCEINLINE rxAABB( EInitInfinity )
+	{
+		min = XMVectorSet(-BIG_NUMBER,-BIG_NUMBER,-BIG_NUMBER,1.0f);
+		max = XMVectorSet(+BIG_NUMBER,+BIG_NUMBER,+BIG_NUMBER,1.0f);
+	}
+};
+
+
+/*
+=============================================================================
+	File:	Memory.cpp
+	Desc:	Memory management.
+	Note:	all functions have been made to allocate 16-byte aligned memory blocks
+	(otherwise, app will crash, mysterious asm-level bugs with __m128, access violation, ... )
+=============================================================================
+*/
+
+#include <Core_PCH.h>
+#pragma hdrstop
+#include <Core.h>
+
+mxREFACTOR("remove std::map, use TPointerMap with default allocation policy(system allocator)")
+#include <map>
+
+mxNAMESPACE_BEGIN
+
+static const char* MEM_STATS_FILE_NAME = "R:/MemoryStats.txt";
+static const bool bDumpMemoryStats = 1;
+
+//
+//	mxErrorMemoryManager
+//
+class mxErrorMemoryManager : public mxMemoryManager
+{
+public:
+	OVERRIDES(mxMemoryAllocator)
+	void* Allocate( SizeT numBytes )
+	{
+		Unreachable;
+		return nil;
+	}
+	OVERRIDES(mxMemoryAllocator)
+	void* AllocateDBG( SizeT numBytes, const char* fileName, int lineNumber )
+	{
+		Unreachable;
+		return nil;
+	}
+	OVERRIDES(mxMemoryDeallocator)
+	void Free( void* pMemory )
+	{
+		Unreachable;
+	}
+	OVERRIDES(mxMemoryDeallocator)
+	void FreeDBG( void* pointer, const char* fileName, int lineNumber )
+	{
+		Unreachable;
+	}
+	OVERRIDES(mxMemoryManager)
+	SizeT SizeOf( const void* ptr ) const
+	{
+		Unreachable;
+		return 0;
+	}
+	OVERRIDES(mxMemoryManager)
+	void GetStats( mxMemoryStatistics &outStats )
+	{
+		Unreachable;
+	}
+};
+
+static mxErrorMemoryManager	g_memMgr_Error;
+
+//
+//	mxSystemMemoryManager
+//
+class mxSystemMemoryManager : public mxMemoryManager
+{
+public:
+	mxSystemMemoryManager()
+	{}
+
+	void Initialize()
+	{
+	}
+	void Shutdown()
+	{
+	}
+
+	OVERRIDES(mxMemoryAllocator)
+	void* Allocate( SizeT numBytes )
+	{
+		Unimplemented;
+	}
+
+	OVERRIDES(mxMemoryAllocator)
+	void* AllocateDBG( SizeT numBytes, const char* fileName, int lineNumber )
+	{
+		void* pNewMem = ::_aligned_malloc_dbg(
+			numBytes,
+			16,
+			fileName,
+			lineNumber
+		);
+		return pNewMem;
+	}
+
+	OVERRIDES(mxMemoryDeallocator)
+	void Free( void* pMemory )
+	{
+		Unimplemented;
+	}
+
+	OVERRIDES(mxMemoryDeallocator)
+	void FreeDBG( void* pointer, const char* fileName, int lineNumber )
+	{
+		::_aligned_free_dbg(
+			pointer
+		);
+	}
+
+	OVERRIDES(mxMemoryManager)
+	SizeT SizeOf( const void* ptr ) const
+	{
+		Unreachable;
+		return 0;
+	}
+
+	OVERRIDES(mxMemoryManager)
+	void GetStats( mxMemoryStatistics &outStats )
+	{
+		Unreachable;
+	}
+};
+
+static mxSystemMemoryManager	g_memMgr_Default;
+
+//
+//	mxStringAllocator - optimal memory manager for string data.
+//
+class mxStringAllocator : public mxMemoryManager
+{
+	mxDynamicBlockAlloc< char, (1<<18), 128 >	dataAllocator;
+
+public:
+	mxStringAllocator()
+	{}
+	~mxStringAllocator()
+	{
+		Shutdown();
+	}
+	void Initialize()
+	{
+		dataAllocator.Init();
+	}
+	void Shutdown()
+	{
+		dataAllocator.Shutdown();
+	}
+	void PurgeMemory()
+	{
+		dataAllocator.FreeEmptyBaseBlocks();
+	}
+	void DumpMemoryUsage()
+	{
+		mxPutf( "%6d KB string memory (%d KB free in %d blocks, %d empty base blocks)\n",
+			dataAllocator.GetBaseBlockMemory() >> 10, dataAllocator.GetFreeBlockMemory() >> 10,
+			dataAllocator.GetNumFreeBlocks(), dataAllocator.GetNumEmptyBaseBlocks() );
+	}
+
+	OVERRIDES(mxMemoryAllocator)
+	void* Allocate( SizeT numBytes )
+	{
+		Assert(dataAllocator.IsInitialized());
+		return dataAllocator.Alloc( numBytes );
+	}
+
+	OVERRIDES(mxMemoryDeallocator)
+	void Free( void* pMemory )
+	{
+		Assert(dataAllocator.IsInitialized());
+		dataAllocator.Free( (char*)pMemory );
+	}
+
+	OVERRIDES(mxMemoryManager)
+	SizeT SizeOf( const void* ptr ) const
+	{
+		Unreachable;
+		return 0;
+	}
+
+	OVERRIDES(mxMemoryManager)
+	void GetStats( mxMemoryStatistics &outStats )
+	{
+		Unreachable;
+	}
+};
+
+static mxStringAllocator	g_memMgr_String;
+
+//
+//	mxTempMemoryManager - memory manager for temporary data.
+//
+class mxTempMemoryManager : public mxMemoryManager
+{
+	mxDynamicBlockAlloc< char, (1<<22), 256 >	dataAllocator;
+
+public:
+	mxTempMemoryManager()
+	{}
+	~mxTempMemoryManager()
+	{
+		Shutdown();
+	}
+	void Initialize()
+	{
+		dataAllocator.Init();
+	}
+	void Shutdown()
+	{
+		dataAllocator.Shutdown();
+	}
+	void PurgeMemory()
+	{
+		dataAllocator.FreeEmptyBaseBlocks();
+	}
+	void DumpMemoryUsage()
+	{
+		mxPutf( "%6d KB temp memory (%d KB free in %d blocks, %d empty base blocks)\n",
+			dataAllocator.GetBaseBlockMemory() >> 10, dataAllocator.GetFreeBlockMemory() >> 10,
+			dataAllocator.GetNumFreeBlocks(), dataAllocator.GetNumEmptyBaseBlocks() );
+	}
+
+	OVERRIDES(mxMemoryAllocator)
+	void* Allocate( SizeT numBytes )
+	{
+		Assert(dataAllocator.IsInitialized());
+		return dataAllocator.Alloc( numBytes );
+	}
+
+	OVERRIDES(mxMemoryDeallocator)
+	void Free( void* pMemory )
+	{
+		Assert(dataAllocator.IsInitialized());
+		dataAllocator.Free( (char*)pMemory );
+	}
+
+	OVERRIDES(mxMemoryManager)
+	SizeT SizeOf( const void* ptr ) const
+	{
+		Unreachable;
+		return 0;
+	}
+
+	OVERRIDES(mxMemoryManager)
+	void GetStats( mxMemoryStatistics &outStats )
+	{
+		Unreachable;
+	}
+};
+
+static mxTempMemoryManager	g_memMgr_Temp;
+
+//=====================================================================
+
+static mxMemoryManager *	g_memHeaps		[ EMemHeap::HeapCount ] = { &g_memMgr_Error };
+static mxMemoryStatistics	g_memHeapStats	[ EMemHeap::HeapCount ];
+
+//=====================================================================
+
+//
+//	mxGlobalMemoryTracker
+//
+class mxGlobalMemoryTracker : public TSingleton< mxGlobalMemoryTracker >
+{
+	PREVENT_COPY( mxGlobalMemoryTracker );
+
+	struct PointerHash
+	{
+		static FORCEINLINE ULONG GetHashCode( const void* ptr )
+		{
+			return mxPointerHash( ptr );
+		}
+	};
+
+	// maps addresses to allocation descriptions
+	typedef TMap<
+		void*,
+		mxAllocationInfo,
+		PointerHash
+	> MemoryMap;
+
+	MemoryMap		mMap;
+
+
+	mxMemoryStatistics	mStats;	// stores memory allocation info within this heap
+
+public:
+
+	mxGlobalMemoryTracker()
+		: mMap( _NoInit )
+	{}
+
+	~mxGlobalMemoryTracker()
+	{}
+	
+	//--------------------------------------------------------------//
+	void Initialize()
+	{
+		g_memMgr_Default.Initialize();
+
+		g_memMgr_String.Initialize();
+
+		g_memMgr_Temp.Initialize();
+
+		{
+			UINT	memSize = ALIGN16( 4 * 1024 * 1024 );
+			BYTE *	memPtr = (BYTE*) mxAlloc( memSize );
+			gTempMem.Initialize( memPtr, memSize );
+		}
+
+		for( UINT iMemHeap = 0; iMemHeap < EMemHeap::HeapCount; iMemHeap++ )
+		{
+			g_memHeaps[ iMemHeap ] = &g_memMgr_Default;
+		}
+
+		g_memHeaps[ EMemHeap::HeapString ] = &g_memMgr_String;
+		g_memHeaps[ EMemHeap::HeapTemp ] = &g_memMgr_Temp;
+
+		mMap.Setup(2048);
+	}
+	//--------------------------------------------------------------//
+	void Shutdown()
+	{
+		mMap.Clear();
+
+		mxFree( gTempMem.GetBufferPtr() );
+		gTempMem.Shutdown();
+
+		g_memMgr_Temp.Shutdown();
+
+		g_memMgr_String.Shutdown();
+
+		g_memMgr_Default.Shutdown();
+
+		MemSet( g_memHeaps, nil, sizeof(g_memHeaps) );
+	}
+	//--------------------------------------------------------------//
+	bool PointerExists(
+		EMemHeap heap,
+		const void* pointer,
+		INT dimension
+	){
+		const mxAllocationInfo* info = mMap.Find( pointer );
+		if( !info ) {
+			return false;
+		}
+		if( info->dimension != dimension ) {
+			return false;
+		}
+		if( info->heap != (UINT)heap ) {
+			return false;
+		}
+		return true;
+	}
+	//--------------------------------------------------------------//
+	const mxAllocationInfo* GetPointerInfo(
+		const void* pointer
+	){
+		MemoryMap::iterator iter = mMap.find( (void*)pointer );
+		if( iter == mMap.end() ) {
+			return nil;
+		}
+		return &iter->second;
+	}
+	//--------------------------------------------------------------//
+	void* Allocate_Debug(
+		EMemHeap heap,
+		SizeT numBytes,
+		INT dimension,
+		const char* fileName,
+		INT lineNumber,
+		const char* expression
+	){
+		Assert( numBytes > 0 );
+
+		numBytes = ALIGN16(numBytes);
+
+		void * pNewMemBlock = ::_aligned_malloc_dbg(
+			numBytes,
+			16,
+			fileName,
+			lineNumber
+		);
+
+		if( ! pNewMemBlock ) {
+			mxWarn("Unable to satisfy request for memory");
+			return null;
+		}
+
+		mxAllocationInfo	allocInfo;
+	
+		allocInfo.ptr		= pNewMemBlock;
+		allocInfo.numBytes	= numBytes;
+		allocInfo.heap		= heap;
+		allocInfo.dimension	= dimension;
+		allocInfo.expression = expression;
+		allocInfo.fileName	= fileName;
+		allocInfo.lineNumber = lineNumber;
+
+		mMap.Set( pNewMemBlock, allocInfo );
+
+		mStats.UpdateOnAllocation( numBytes );
+		g_memHeapStats[ heap ].UpdateOnAllocation( numBytes );
+
+		return pNewMemBlock;
+	}
+	//--------------------------------------------------------------//
+	void Free_Debug(
+		EMemHeap heap,
+		void* pointer,
+		INT dimension,	// 0 - for single objects, 1 - for arrays and so on
+		const char* fileName,
+		INT lineNumber,
+		const char* expression
+	){
+		AssertPtr( pointer );
+
+		mxAllocationInfo* pInfo = mMap.Find( pointer );
+		AssertX( pInfo != nil, "Pointer not in map." );
+		AssertX( pInfo->dimension == dimension, "Mismatch in dimensions." );
+		AssertX( pInfo->heap == (UINT)heap, "Mismatch in memory heaps." );
+
+		const UINT numBytes = pInfo->numBytes;
+
+		// Remove T from memory map.
+		mMap.Remove( pointer );
+		//mMap.erase( pointer );
+
+		::_aligned_free_dbg(
+			pointer
+		);
+
+		mStats.UpdateOnDeallocation( numBytes );
+		g_memHeapStats[ heap ].UpdateOnDeallocation( numBytes );
+	}
+	//--------------------------------------------------------------//
+	void _myputf( FILE* file, const char* fmt, ... )
+	{
+		char	buffer[ MAX_STRING_CHARS ];
+		MX_GET_VARARGS_ANSI( buffer, fmt );
+
+		mxPut( buffer );
+		::fputs( buffer, file );
+	}
+	//--------------------------------------------------------------//
+	void _dumpMemHeapStats( const mxMemoryStatistics& stats, FILE* file )
+	{
+		_myputf( file,
+			"\nAllocated now: %u bytes, allocated in total: %u bytes, total allocations: %u"
+			"\nDeallocated in total: %u bytes, total deallocations: %u"
+			"\nPeak memory usage: %u Kb"
+			,stats.bytesAllocated ,stats.totalAllocated ,stats.totalNbAllocations
+			,stats.totalDellocated ,stats.totalNbDeallocations
+			,stats.peakMemoryUsage/1024
+		);
+	}
+	//--------------------------------------------------------------//
+	void DumpStats( const char* fileName )
+	{
+		FILE * outFile = ::fopen( fileName, "wt" );
+		if( ! outFile ) {
+			mxWarnf("Failed to open file '%s' for writing\n",fileName);
+			return;
+		}
+
+		// Write memory statistics.
+		{
+			CalendarTime	localTime( CalendarTime::GetCurrentLocalTime() );
+
+			String	timeOfDay;
+			GetTimeOfDayString( localTime.hour, localTime.minute, localTime.second,
+				timeOfDay );
+
+			_myputf( outFile, "=== [%s] Memory statistics: ===\n", timeOfDay.ToChar() );
+
+
+			_myputf( outFile, "\n--- Global memory usage report ----------\n" );
+			_dumpMemHeapStats( mStats, outFile );
+
+			for( UINT iMemHeap = 0; iMemHeap < EMemHeap::HeapCount; iMemHeap++ )
+			{
+				_myputf( outFile, "\n\n--- [%u] Memory heap: '%s' ----------", iMemHeap, mxGetMemoryHeapName( (EMemHeap)iMemHeap ) );
+				_dumpMemHeapStats( g_memHeapStats[ iMemHeap ], outFile );
+			}
+		}
+
+		// Dump memory leaks.
+
+		UINT numActivePointers = (UINT)mMap.size();
+		if( numActivePointers > 0 )
+		{
+			_myputf( outFile,
+				"\n\n--- %u Memory leaks detected! Dumping memory leaks ->\n",
+				numActivePointers );
+
+			MemoryMap::const_iterator iter = mMap.begin();
+			MemoryMap::const_iterator iterEnd = mMap.end();
+
+			UINT num = 0;
+
+			while( iter != iterEnd )
+			{
+				const void * address = iter->first;
+				const mxAllocationInfo & info = iter->second;
+
+				_myputf(
+					outFile,
+					"\n[%u]: '%s' in file: '%s', line: %d,"
+					"\n\t%u bytes, addr: {%d}, dim: %u"
+					"\n"
+					,num++
+					,info.expression,info.fileName,info.lineNumber,
+					info.numBytes
+					,(int)address,info.dimension
+				);
+
+				++iter;
+			}
+		}
+		else
+		{
+			_myputf(outFile,"\n\n--- No Memory leaks found.\n");
+		}
+
+		mxPut("\n--- Memory stats saved to disk.");
+
+		::fclose( outFile );
+	}
+	//--------------------------------------------------------------//
+	void GetStats( mxMemoryStatistics &outStats )
+	{
+		outStats = mStats;
+	}
+};
+
+static mxGlobalMemoryTracker globalMemoryMgr;
+
+//--------------------------------------------------------------//
+
+void mxHeapGetStatistics( mxMemoryStatistics &outStats )
+{
+	globalMemoryMgr.GetStats( outStats );
+}
+//--------------------------------------------------------------//
+void mxHeapDump( const char* fileName )
+{
+	globalMemoryMgr.DumpStats( fileName );
+}
+//--------------------------------------------------------------//
+void* mxAlloc_Debug_Internal(
+	EMemHeap memClass,
+	SizeT numBytes,
+	const char* fileName,
+	int lineNumber,
+	const char* expression
+){
+	return globalMemoryMgr.Allocate_Debug(
+		memClass,
+		numBytes,
+		MEM_UNKNOWN_DIMENSION,
+		fileName,
+		lineNumber,
+		expression
+	);
+}
+//--------------------------------------------------------------//
+void mxFree_Debug_Internal(
+	EMemHeap memClass,
+	void* pMemory,
+	const char* fileName,
+	int lineNumber,
+	const char* expression
+){
+	// deleting null pointer is valid in ANSI C++
+	if( pMemory )
+	{
+		globalMemoryMgr.Free_Debug(
+			memClass,
+			pMemory,
+			MEM_UNKNOWN_DIMENSION,
+			fileName,
+			lineNumber,
+			expression
+		);
+	}
+}
+
+/*================================
+		mxDebugMemoryManager
+================================*/
+
+bool mxDebugMemoryManager::ValidatePointer_Dbg(
+	EMemHeap heap,
+	const void* pointer,
+	INT dimension
+){
+	return globalMemoryMgr.PointerExists(
+		heap,
+		pointer,
+		dimension
+	);
+}
+//--------------------------------------------------------------//
+const mxAllocationInfo* mxDebugMemoryManager::GetPointerInfo(
+	const void* pointer
+){
+	return globalMemoryMgr.GetPointerInfo( pointer );
+}
+//--------------------------------------------------------------//
+void* mxDebugMemoryManager::AllocateMemoryBlock_Dbg(
+	EMemHeap heap,
+	SizeT numBytes,
+	INT dimension,
+	const char* fileName,
+	int lineNumber,
+	const char* expression
+){
+	return globalMemoryMgr.Allocate_Debug(
+		heap,
+		numBytes,
+		dimension,
+		fileName,
+		lineNumber,
+		expression
+	);
+}
+//--------------------------------------------------------------//
+void mxDebugMemoryManager::FreeMemoryBlock_Dbg(
+	EMemHeap heap,
+	void* pointer,
+	INT dimension,
+	const char* fileName,
+	int lineNumber,
+	const char* expression
+){
+	globalMemoryMgr.Free_Debug(
+		heap,
+		pointer,
+		dimension,
+		fileName,
+		lineNumber,
+		expression
+	);
+}
+
+//--------------------------------------------------------------//
+
+mxStackAllocator	gTempMem;
+
+/*
+================================
+	Setup_MemorySystem
+================================
+*/
+void Setup_MemorySystem()
+{
+	globalMemoryMgr.Initialize();
+}
+
+/*
+================================
+	Shutdown_MemorySystem
+================================
+*/
+void Shutdown_MemorySystem()
+{
+	globalMemoryMgr.Shutdown();
+
+	if( bDumpMemoryStats ) {
+		globalMemoryMgr.DumpStats( MEM_STATS_FILE_NAME );
+	}
+}
+
+mxNAMESPACE_END
+
+
+/*
+========================
+	mxGetMemoryHeapName
+========================
+*/
+const char* mxGetMemoryHeapName( EMemHeap code )
+{
+	static_ const char* names[ EMemHeap::HeapCount ] =
+	{
+#define DECLARE_MEMORY_HEAP( enm, desc )	#enm
+	#include "MemoryHeaps.inl"
+#undef DECLARE_MEMORY_HEAP
+	};
+	return names[ code ];
+}
+
+//--------------------------------------------------------------//
+//				End Of File.									//
+//--------------------------------------------------------------//
+
+
+
+
+#endif // !__MX_TEMPLATE_SMALL_BUFFER_H__
+
+//--------------------------------------------------------------//
+//				End Of File.									//
+//--------------------------------------------------------------//
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*
+=============================================================================
+	File:	TList.h
+	Desc:	An object array which doubles in size by default.
+=============================================================================
+*/
+
+#ifndef __MX_TEMPLATE_OBJECT_ARRAY_H__
+#define __MX_TEMPLATE_OBJECT_ARRAY_H__
+
+mxNAMESPACE_BEGIN
+
+mxHACK("workaround the bug in memory tracking system")
+mxBUG("when using debug heap")
+#define MX_USE_SYSTEM_NEW_DELETE_FOR_TList	1
+
+//
+//	TList< TYPE >
+//
+//	NOTE: its capacity can only be a power of two.
+//	NOTE: memory alignment is EFFICIENT_ALIGNMENT (usually 16-byte aligned).
+//
+template< typename TYPE >
+class TList {
+public:
+	typedef TList<TYPE> THIS_TYPE;
+
+	// Creates a zero length array.
+	TList();
+
+	// Creates an array of size n.
+	explicit TList( UINT size );
+
+	// Deallocates array memory.
+	~TList();
+
+
+	// Returns the capacity.
+	UINT GetCapacity() const;
+
+
+	// Checks if the size is zero.
+	bool IsEmpty() const;
+
+	// Releases allocated memory (calling destructors of elements) and empties the array.
+	void Clear();
+
+
+	// Adds an element to the end.
+	TYPE& Add( const TYPE& newOne );
+
+	// Increments the size by 1 and returns a reference to the first element created.
+	TYPE & Add();
+
+	void AddZeroed( UINT numElements );
+
+	// Fast and unsafe. Use with care!
+	// Increments the size by 1 and returns a reference to the last element.
+	// Doesn't AllocateMemory memory. Clamps new element's index to array bounds avoiding checking for overlow.
+	TYPE & AddFast_Unsafe();
+
+	void AddFast_Unsafe( const TYPE& newOne );
+
+	// Removes the specified element and moves all data following the element down to fill in the gap.
+	void Remove( const TYPE& item );
+
+	// Removes the element at the specified index, copying elements down one slot as in the STL array.
+	// Slower than RemoveAt(), but the order is unchanged.
+	void RemoveAt( UINT index );
+
+	// Removes the element at the specified index. The last array element is used to replace the removed element, and the size is reduced by 1.
+	// This is very fast, but note that the order of elements is changed.
+	void RemoveAt_Fast( UINT index );
+
+
+	TYPE &			GetLast();
+	const TYPE &	GetLast() const;
+
+	// Returns the index of the first occurrence of the given element, or INDEX_NONE if not found.
+	// Slow! (uses linear search)
+	int FindIndexOf( const TYPE& element ) const;
+
+	// Returns index of the last occurrence of the given element, or INDEX_NONE if not found.
+	int LastIndexOf( const TYPE& element ) const;
+
+	// Searches for the given element and returns a pointer to it, or NULL if not found.
+	TYPE* Find( const TYPE& element ) const;
+
+
+	// Read/write access to the i'th element.
+	TYPE& operator [] ( UINT i );
+
+	// Read only access to the i'th element.
+	const TYPE& operator [] ( UINT i ) const;
+
+	TYPE *			ToPtr();
+	const TYPE *	ToPtr() const;
+
+	TYPE *			GetItemPtr( UINT index );
+	const TYPE *	GetItemPtr( UINT index ) const;
+
+	// Ensures no reallocation occurs until at least size 'numElements'.
+	void Reserve( UINT numElements );
+
+	// Ensures that there's a space for at least the given number of elements.
+	void ReserveMore( UINT numElements );
+
+	void SetNum( UINT numElements );	// resizes the array if necessary
+
+	//TODO: make special ReserveAndGrowByHalf(newNum) and ReserveAndGrowByNumber(newNum,granularity) ?
+
+	//TODO: sorting, binary search, algorithms & iterators
+
+
+	// Returns the total size of stored elements, in bytes.
+	SizeT	GetDataSize() const;
+
+	// Returns the amount of reserved memory in bytes (memory allocated for storing the elements).
+	SizeT	GetAllocatedMemory() const;
+
+	// Returns the total amount of occupied memory in bytes.
+	SizeT	GetMemoryUsed() const;
+
+
+	template< class FUNCTOR >
+	void Do_ForEach( FUNCTOR& functor, UINT startIndex, UINT endIndex )
+	{
+		for( UINT i = startIndex; i < endIndex; i++ ) {
+			functor( (this*)[ i ] );
+		}
+	}
+
+	template< class FUNCTOR >
+	void Do_ForAll( FUNCTOR& functor )
+	{
+		for( UINT i = 0; i < mNum; i++ ) {
+			functor( mData[ i ] );
+		}
+	}
+
+	template< class FUNCTOR >
+	TYPE* Do_FindFirst( FUNCTOR& functor )
+	{
+		for( UINT i = 0; i < mNum; i++ ) {
+			if( functor( mData[i] ) ) {
+				return &mData[i];
+			}
+		}
+		return nil;
+	}
+	template< class FUNCTOR >
+	INT Do_FindFirstIndex( FUNCTOR& functor )
+	{
+		for( UINT i = 0; i < mNum; i++ ) {
+			if( functor( mData[i] ) ) {
+				return i;
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	// calls destructors, deletes each element and zeroes the array.
+	void DeletePointers()
+	{
+		for( UINT i = 0; i < mNum; i++ ) {
+			free_one( mData[i] );
+			mData[i] = nil;
+		}
+
+		MemZero( mData, GetDataSize() );
+	}
+
+	// Convenience function to emtpy the array.
+	FORCEINLINE void Empty() { mNum = 0; }
+
+	// Convenience function to get the number of elements in this array.
+	// Returns the size (the number of elements in the array).
+	FORCEINLINE UINT Num() const { return mNum; }
+
+	FORCEINLINE bool IsValidIndex( UINT index ) const {
+		return (index >= 0) && (index < mNum);
+	}
+
+	// works only in debug mode
+	void debugCheckSelf();
+
+private:
+	// This frees the memory only, doesn't update capacity, doesn't set mData to null!
+	void ReleaseMemory();
+
+private:	PREVENT_COPY(THIS_TYPE);
+private:
+	TYPE *	mData;	// pointer to the allocated memory
+	UINT	mNum;	// number of elements, this should be inside the range [0..mCapacity)
+	UINT	mCapacity;	// number of allocated entries - should be a power of two
+};
+
+template< typename TYPE >
+FORCEINLINE TList< TYPE >::TList() {
+	mData = null;
+	mNum = 0;
+	mCapacity = 0;
+}
+
+template< typename TYPE >
+FORCEINLINE TList< TYPE >::TList( UINT size ) {
+	Assert( size <= MAX_CAPACITY );
+	Assert( size > 0 || size == 1 || IsPowerOfTwoU(size) );
+	mData = null;
+	mNum = 0;
+	mCapacity = 0;
+	Reserve( size );
+}
+
+template< typename TYPE >
+FORCEINLINE TList< TYPE >::~TList() {
+	if( mData ) {
+#if MX_USE_SYSTEM_NEW_DELETE_FOR_TList
+		delete [] mData;
+#else
+		free_array( mData );
+#endif
+	}
+}
+
+template< typename TYPE >
+FORCEINLINE UINT TList< TYPE >::GetCapacity() const {
+	return mCapacity;
+}
+
+template< typename TYPE >
+FORCEINLINE bool TList< TYPE >::IsEmpty() const {
+	return !mNum;
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::Clear() {
+	ReleaseMemory();
+	mData = null;
+	mNum = 0;
+	mCapacity = 0;
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE& TList< TYPE >::Add( const TYPE& newOne )
+{
+	Reserve( mNum + 1 );
+	mData[ mNum ] = newOne;
+	return mData[ mNum++ ];
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE & TList< TYPE >::Add() {
+	Reserve( mNum + 1 );
+	return mData[ mNum++ ];
+}
+
+template< typename TYPE >
+void TList< TYPE >::AddZeroed( UINT numElements ) {
+	Reserve( mNum + numElements );
+	MemZero( (BYTE*)mData + mNum*sizeof(TYPE), numElements*sizeof(TYPE) );
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE & TList< TYPE >::AddFast_Unsafe() {
+	const Natural newIndex = (mNum++) & (mCapacity-1);//avoid checking for overflow
+	return mData[ newIndex ];
+}
+
+template< typename TYPE >
+void TList< TYPE >::AddFast_Unsafe( const TYPE& newOne )
+{
+	const Natural newIndex = (mNum++) & (mCapacity-1);//avoid checking for overflow
+	mData[ newIndex ] = newOne;
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::Remove( const TYPE& item )
+{
+	int index = FindIndexOf( item );
+	Assert(index!=INDEX_NONE);
+	RemoveAt( index );
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::RemoveAt( UINT index )
+{
+	Assert( IsValidIndex( index ) );
+	--mNum;
+	for( UINT i = index; i < mNum; i++ ) {
+		mData[i] = mData[i+1];
+	}
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::RemoveAt_Fast( UINT index )
+{
+	Assert( IsValidIndex( index ) );
+	--mNum;
+	mData[ index ] = mData[ mNum ];
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE & TList< TYPE >::GetLast() {
+	Assert(mNum>0);
+	return mData[ mNum-1 ];
+}
+
+template< typename TYPE >
+FORCEINLINE const TYPE & TList< TYPE >::GetLast() const {
+	Assert(mNum>0);
+	return mData[ mNum-1 ];
+}
+
+template< typename TYPE >
+FORCEINLINE int TList< TYPE >::FindIndexOf( const TYPE& element ) const
+{
+	for( UINT i = 0; i < mNum; i++ ) {
+		if( element == mData[ i ] ) {
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+template< typename TYPE >
+FORCEINLINE int TList< TYPE >::LastIndexOf( const TYPE& element ) const
+{
+	for(UINT i = mNum-1; i >= 0; i++) {
+		if( element == mData[ i ] ) {
+			return i;
+		}
+	}
+	return INDEX_NONE;
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE* TList< TYPE >::Find( const TYPE& element ) const
+{
+	for( UINT i = 0; i < mNum; i++ ) {
+		if( element == mData[ i ] ) {
+			return &(mData[ i ]);
+		}
+	}
+	return null;
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE& TList< TYPE >::operator [] ( UINT i )
+{
+	Assert( IsValidIndex( i ) );
+	return mData[ i ];
+}
+
+template< typename TYPE >
+FORCEINLINE const TYPE& TList< TYPE >::operator [] ( UINT i ) const
+{
+	Assert( IsValidIndex( i ) );
+	return mData[ i ];
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE * TList< TYPE >::ToPtr() {
+	return mData;
+}
+
+template< typename TYPE >
+FORCEINLINE const TYPE * TList< TYPE >::ToPtr() const {
+	return mData;
+}
+
+template< typename TYPE >
+FORCEINLINE TYPE * TList< TYPE >::GetItemPtr( UINT index )
+{
+	Assert( IsValidIndex( index ) );
+	return mData + index;
+}
+
+template< typename TYPE >
+FORCEINLINE const TYPE * TList< TYPE >::GetItemPtr( UINT index ) const
+{
+	Assert( IsValidIndex( index ) );
+	return mData + index;
+}
+
+template< typename TYPE >
+INLINE void TList< TYPE >::Reserve( UINT numElements )
+{
+	Assert( numElements > 0 );
+	const UINT oldCapacity = mCapacity;
+	// resize if necessary
+	if( numElements > oldCapacity )
+	{
+		const UINT newNum = IsPowerOfTwoU(numElements) ? numElements : NextPowerOfTwo( numElements+1 );
+
+		// Allocate a new array
+#if MX_USE_SYSTEM_NEW_DELETE_FOR_TList
+		TYPE * newArray = new TYPE [newNum];
+#else
+		TYPE * newArray = new_array( TYPE, newNum );
+#endif
+		// copy the old list into our new one
+		if( mData )
+		{
+			for( UINT iObj = 0; iObj < mNum; iObj++ )
+			{
+				newArray[ iObj ] = mData[ iObj ];
+			}
+			// delete the old list if it exists
+#if MX_USE_SYSTEM_NEW_DELETE_FOR_TList
+			delete [] mData;
+#else
+			free_array( mData );
+#endif
+		}
+		mData = newArray;
+		mCapacity = newNum;
+		Assert(IsPowerOfTwoU(mCapacity));
+	}
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::ReserveMore( UINT numElements )
+{
+	const UINT oldCapacity = mCapacity;
+	const UINT newCapacity = oldCapacity + numElements;
+	Reserve( newCapacity );
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::SetNum( UINT numElements )
+{
+	Reserve( numElements );
+	mNum = numElements;
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::ReleaseMemory() {
+#if MX_USE_SYSTEM_NEW_DELETE_FOR_TList
+	delete [] mData;
+#else
+	free_array( mData );
+#endif
+}
+
+template< typename TYPE >
+FORCEINLINE SizeT TList< TYPE >::GetDataSize() const
+{
+	return mNum * sizeof(TYPE);
+}
+
+template< typename TYPE >
+FORCEINLINE SizeT TList< TYPE >::GetAllocatedMemory() const {
+	return mCapacity * sizeof(TYPE);
+}
+
+template< typename TYPE >
+FORCEINLINE SizeT TList< TYPE >::GetMemoryUsed() const {
+	return GetAllocatedMemory() + sizeof(*this);
+}
+
+template< typename TYPE >
+FORCEINLINE void TList< TYPE >::debugCheckSelf()
+{
+	Assert( mCapacity < MAX_CAPACITY );
+	Assert( mNum < mCapacity );//this can happen after AddFast_Unsafe()
+	if( mData ) {AssertPtr(mData);}
+}
+
+mxNAMESPACE_END
+
+#endif // !__MX_TEMPLATE_OBJECT_ARRAY_H__
+
+//--------------------------------------------------------------//
+//				End Of File.									//
+//--------------------------------------------------------------//
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

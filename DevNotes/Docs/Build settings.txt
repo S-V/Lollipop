@@ -1,0 +1,65 @@
+Last updated: 2011.04.11
+
+=================================================================
+	OUTPUT DIRECTORIES
+=================================================================
+
+// Binaries
+
+R:\_\Bin
+
+// Intermediate
+
+R:\_\Build\$(ConfigurationName)
+R:\_\Intermediate\$(ProjectName)\$(ConfigurationName)
+
+=================================================================
+	CONFIGURATION
+=================================================================
+
+[Debug]
+
+Character Set : Unicode
+Enable C++ Exceptions : yes
+Floating Point Models : /fp:fast
+Enable Run-Time Type Info: yes
+
+[Release]
+
+Character Set : Unicode
+Enable C++ Exceptions : No
+Floating Point Models : /fp:fast
+Enable Run-Time Type Info: No
+
+=================================================================
+	LINKER
+=================================================================
+
+Libraries to link with:
+
+kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib opengl32.lib winmm.lib
+
+Project 'Network' linked with:
+ws2_32.lib $(NOINHERIT)
+
+MSVCRTD.lib
+MSVCRT.lib
+
+LIBCMT.lib
+LIBCMTD.lib
+
+=================================================================
+	COMMAND LINE OPTIONS
+=================================================================
+
+/d1reportAllClassLayout
+
+/d1reportSingleClassLayout##nameOfClass (e.g. /d1reportSingleClassLayoutCPlayer)
+
+
+=================================================================
+	BUILD EVENTS
+=================================================================
+
+Pre-Link event
+xcopy "D:\_\Development\Build\Files" "$(TargetDir)" /e /y /i /r

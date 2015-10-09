@@ -1,0 +1,15 @@
+Renderer - the rendering engine, uses low-level Graphics module.
+
+@fixme:
+
+refactor virtual functions into switch statement
+once i have a stable class hierarchy.
+
+(e.g.
+switch( renderEntityType )
+{
+	case STATIC_MODEL:	DrawStaticModel((StaticModel*)entity); break;
+	case SKINNED_MODEL:	DrawSkinnedModel((StaticModel*)entity); break;
+	default: entity->VirtualDrawSelf(); break;
+}
+)

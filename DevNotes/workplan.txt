@@ -1,0 +1,406 @@
+Tool center - a small GUI app from which all tools can be reached/launched.
+Tools:
+Material editor
+Content browser
+Particle editor
+Unit editor
+Texture manager
+Level editor
+State machine editor
+Animation manager
+Lighting editor
+Localizer
+Distance field
+
+System tools:
+Console, file server ,id lookup, shader dev, build master, dependency checker,
+compile server
+
+Documentation:
+Lua & Art, C++
+
+
+
+
+
+
+
+Ќачинай писать с малого, с концепт-документа 
+общей дл€ всех структуры такого документа нет, дл€ примера могу дать такие пункты: 
+1) Ќазвание проекта: __ 
+2) ∆анр: __ 
+3) —еттинг: __ 
+4) ѕлатформа: (–—, приставки, мобилки, проч) 
+5) ”правление: ___ 
+6) ¬ид (2в,3в, положение камеры, проч) 
+7)  раткое описание геймпле€:___ 
+8) ќсновные и вторичные фичи
+
+
+
+название: рабочее knight quest 
+жанр: платформер 
+сеттинг: фентези 
+платформа: –— (хотелось бы в будущем и дл€ иподов\андроидов сделать) 
+управление: мыша 
+вид: 2д персонажи в 3д окружении, камера зафиксирована на глав.герое 
+остальное пока в процессе переложени€ из головы в формат ворда =)
+
+»з инструментари€ после небольшого обзора и дебатов были выбраны в итоге: 
+ƒвижок UDK из-за больших возможностей и бесплатности дл€ инди-игр, обучени€. ƒа и лицензию всегда можно купить позже, если потребуетс€. 
+Autodesk 3Ds Max и Adobe Photoshop дл€ 3д\2д графики, благо есть лицензионные копии, если оп€ть же в будущем встанет вопрос. 
+Mircosoft Office, Microsoft Visio дл€ планировани€ игры и диз.дока. “ак же нагло сперта€ лицензи€ с гос.предпри€ти€ =) 
+ќ—: Windows 7
+
+
+
+
+projective textures
+post-processing
+shadow mapping
+billboards
+portals
+csg
+
+Planned demos:
+
+* Hello_Cube (Hello, Sphere!?) - create a glass sphere (spherical mirror).
+* Demo_Shaders - integration of new shaders with the engine.
+* Demo_Portals - multiple scenes located at the same place and connected through portals;
+				magic box with its door-portal(box with a portal leading to some big room).
+* Sample_CSG - real-time constructive solid geometry.
+* 2D rendering.
+
+* Physics
+
+* Terrain rendering
+* Planetary rendering ( universe, solar system, etc )
+
+* The last?) Mini-Game
+* FPS game demo with weapons, opponents, robots with arms-manipulators, inverse kinematics, procedural music, etc.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Posted 25th Jul 2011 10:48am
+Mutant
+Post 1 / 2
+	 I have to stop this gossip  Open Faction is nothing related to THQ. It's my project as SeeLanCeLoT already said. Now I'd like to introduce it.
+
+What is it?
+ Open Faction is an independent project to rewrite the Red Faction engine from scratch. It makes use of RF map, texture and sound files so a legal copy of game is needed to use OF. At the moment only the server exists. I'm not sure if the client will ever be made.
+ I am actually the main developer. NoCigar helps me from time to time.
+
+Why did I make it?
+ I know Red Faction is nearly a dead game, but I like it and have enjoyed playing it for many years. This project will give me much experience in games development and is also a lot of fun.
+
+Why not PF?
+ - it seems that Digi and Trotskie are reluctant to share their sources with anyone
+ - I have found PF to be unstable (PF 3 often crashes for me)
+ - PF is only a patch written in Assembler
+ - writing game from scratch allow me to make everything in my own way instead of hacking THQ code
+
+Features
+ Right now Open Faction server can:
+ - load levels (it doesn't check filename prefix so single player maps like L1S1 can also be loaded)
+ - load items
+ - allows picking items up
+ - all game modes (DM, TeamDM, CTF) are supported
+ - triggers work
+ - continuous damage events work
+ - players can shoot but collisions aren not finished yet, because I have to reverse engineer the Red Faction models and geometry. Currently instead of using real geometry clutter and entities use simple models - cylinders and spheres.
+
+What still needs to be done?
+ To be compatible with RF server the following things have to be done:
+ - real geometry models
+ - server side movers (for DeathRun maps)
+ - glass support
+ - geomod support
+
+ Open Faction server will also have new features:
+ - scripting support, most likely using LUA (will allow adding new game modes, global statistics and much more)
+ - cross platform (Linux is natively supported)
+ - we aim to make it more stable than RF server
+
+ If anybody wants to help me (especially c++ developers) please contact me.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Instinct Studio is a cross platform game development solution featuring high-performance graphics coupled with powerful game creation tools, allowing a wide variety of game genres to be developed. These tools support WYSIWYG editing within a single unified working environment, maximizing productivity by reducing iteration times. The software has been designed as a true middleware API utilizing a set of extensible frameworks.
+
+High Performance Graphics
+Х Highly efficient rendering and flexible scene management system.
+Х Optimizing scene compiler can be used to greatly increase performance of both indoor and outdoor scenes.
+Х Customizable graphics system - plug in your own visibility system, post processing effects, etc.
+Х Default system supports both indoor (using BSP, portals & PVS) and large outdoor environments (using kd-tree).
+Х Inheritance based materials eliminates lengthy shader compile times.
+Х Supports many industry standard formats like HLSL, .dds, .png, .ogg, dae (COLLADA), .map, etc.
+Х Inbuilt models and animations solution with an exporter for 3D Studio Max.
+
+Cutting Edge Graphics Techniques
+Х Deferred Rendering option to dramatically improve dynamic lighting performance.
+Х Shadow filtering; Uniform PCF, Jittered PCF and ESM.
+Х Cascaded Shadow Maps (CSM) for increased shadow quality on global lights. 
+Х High Dynamic Range lighting.
+Х Post Processing framework: Tone Mapping, Pixel Motion Blur, Depth of Field, etc.
+Х GPU Skinning (4 bones per vertex).
+
+Powerful Game Creation Tools
+Х Intuitive, modern user interface using MS Office 2007 Ribbon and Visual Studio style docking controls.
+Х Real-time editing and WYSIWYG tools provide instant feedback to level designers.
+Х Instantly play the scene you are working on from within the editing environment.
+Х Prefabs allow heavy reuse of content and simplify development and level design.
+Х Undo / redo supported on all operations.
+Х Manage game assets directly in the editing environment.
+Х Construct scene geometry using the internal brush editing tools, or import from 3rd party art packages.
+
+Flexible Cross Platform Game Development
+Х Cross platform game development (PC & Xbox 360 ready, with PS3 currently in development).
+Х Remote Control reflects tools environment on a console dev-kit in real-time.
+Х Data driven, flexible and modular framework built in C++ with support for LUA scripting.
+Х Modular component-based design enables easy modification and extensibility.
+Х Integrate existing or third party code with ease.
+Х Genre agnostic. Has been used in first person shooters, 3rd person action games, air combat games, puzzle games and 2D Sprite based games.
+Х Performance has not been sacrificed to support the modular design.
+Х Provides a large library of optimized low level utilities - memory manager, containers, maths, profiling, etc.
+
+Best-of-breed Middleware Integration
+Х Physics is provided via our Ageia PhysX integration.
+Х Music and sound support is provided via our FMod integration. We also provide a DirectSound implementation.
+Х Scaleform is supported for rendering graphical user interfaces created using Adobe Flash. 
+Х Philips amBX is supported for controlling amBX ambient environment hardware.
+Х Actively adding support for other quality middleware products.
+
+First Class Customer Support
+We provide several levels of customer support options ranging from answering questions posted on our forums to hands-on remote technical support using WebEx. Comprehensive artist and programmer documentation is provided with the software.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Render
+3D Stereo. Best support of NVIDIA 3D Vision 
+Smooth transition between LODs
+Terrain: LOD support
+Mac, OpenGL: Access to depth texture
+Mac, OpenGL: Soft Particles
+Scene management: full culling outdoor, terrain culling
+Deferred shading
+DirectX 11 (Tesselation support)
+Depth of field
+Screen Space Ambient Occlusion (SSAO)
+Variance Shadow Maps (VSM)
+Light source: Projective textures for spot and point light sources
+Light optimizations: Clip planes and scissors for spot and point lights.
+Static lighting: HDR lightmaps
+Static lighting: Opportunity to set up parameters of calculation for each object
+Static lighting: Vertex color lighting
+Static lighting: Irradiance volume for indoor
+Static lighting: Smaller memory using for irradiance volume
+Static lighting: DecorativeObjectManager support
+Static lighting: Normal mapping support (directional lightmap)
+Static lighting: Texture alpha blending
+Physics
+Bullet physics
+Body positioning on ragdoll creation determined by last animation
+Cloth
+Soft body
+Networking support
+Better support for FPS games (prediction on client)
+Local servers discover
+Simulation of lag and loss UDP packets for testing
+Graphic User Interface
+SceneBox - scene management in a control. You can place models, effects, etc. This class is convenient for the output of simple scenes. For example, a garage with a choice of a car in an auto simulator.
+Table
+Resource Editor
+Undo/redo support
+Better gizmo management
+Map Editor
+Better gizmo management
+Automatic resource updating from external modification
+
+
+
+
+I often like to browse around on youtube looking for WIP (work-in-progress) videos or gameplay videos for indie games. I find it interesting to see what others are doing. But I find a lot of mistakes being made.
+
+Here are some things to keep in mind:
+Keep your intro short. DonТt talk for half the video or show credits for the first half of the video. Get to the action quickly.
+Make your video as short as possible while still showing all the salient points. DonТt show the same thing over and over.
+DonТt show me character selection screens or loading screens (unless youТre explicitly trying to demonstrate something about them).
+Related to the above, I donТt want to see the contents of your Start Menu, or the code in your IDE. Basically, edit your video so I donТt have to watch you start your game up.
+If you have on-screen text that explains something, make sure itТs visible.
+Audio is good. But no obnoxious heavy metal music, unless it really fits whatТs being shown. IТll often come across a video of someone showing their game editor accompanied by thrash metal. What on earth?
+
+And some additional tips to keep in mind if youТre showing off something that you actually want to publish/sell:
+If this is an Уofficial trailerФ and not just a dev log, donТt do voice-overs yourself! Hire a professional.
+Pay for the full version of fraps so you donТt have the logo sitting there.
+
+
+
+
+
+
+
+
+
+
+Some of the features that will be present in the Cry Engine 3 include:
+Integrated vegetation & terrain cover generation system
+Real time soft particle system & integrated FX editor
+Multi-core support
+Real time dynamic global illumination
+Deferred lighting
+Natural lighting & dynamic soft shadows
+Volumetric, layer & view distance fogging
+Screen Space Ambient Occlusion
+"Uber Shader" technology (I can get down with some uber technology)
+Eye adaptation & high dynamic range (HDR) lighting
+Motion blur & depth of field
+Parametric skeletal animation
+Facial animation editor
+Subsurface scattering
+Dynamic pathfinding (plenty of games that could use a dose of this)
+Natural world effects
+CGI quality time of day system
+High quality 3D water
+Dynamic volumetric light beams & light shaft effects
+Streaming environments
+Integrated multi-threaded physics engine
+Interactive & destructible environments (for all us gamers who love blowing stuff up)
+Rope physics (this one sounds rather underwhelming)
+PolyBump
+Data-driven sound system
+Dynamic sounds & interactive music
+Environmental audio
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[Editor's note: 4A recently announced support for the new APIs in DirectX 11 too, which will be supported in Metro 2033. Also be aware that while the 4A engine supports PS3, Metro 2033 will launch just on 360 and PC.]
+
+Rendering
+Using innovative visualisation technology, based on human visual system (HVS) perception and response.
+The gamma-correct, linear colour space renderer 
+High dynamic range rendering (HDR) Using floating-point buffers, allowing for tone mapping, exposure adaption, and blue shift, for camera/eye perceptual rendering
+Advanced deferred shading - allows hundreds of lights in frame, in huge, complex scenes
+All lighting is fully dynamic (including sun and skies), ability to use light-shaders, with dozens of special effects
+Umbra and penumbra - Correct soft shadows, including shadows correctly curved on bumped surface. Shadows from semi-transparent objects like particles.
+Weather and day/night model, including light scattering model and god-rays
+Volumetric fogging and lighting, even in animated, non-constant density media
+Global illumination effects and real-time reflective lights
+Parallax occlusion maps and real (geometric) displacement mapping
+Hierarchical per-pixel occlusion culling
+Real-time colour correction, film grain and noise, correct depth of field
+Velocity preserving motion-blur on a scene with millions of polygons and complex shading detail (including object blur)
+Deferred reflections - allows a lot of planar real time reflections in a single frame, like water, glass, etc.
+Ambient occlusion calculated on both the global scale (pre-calculated) and in real-time in screen space (SSAO)
+In addition to standard MSAA, the engine features analytical anti-aliasing (AAA) and "deferred super-sampling" modes which have much lower impact on frame-rate, while correctly ant-ialiasing all surfaces and not just edges
+Renderer is highly multi-threaded for multiple CPU cores. 
+Plus: per-pixel lighting, bumpy reflections and refractions, animated and detail textures, shiny surfaces, cosmetic damage using albedo and bump blending, soft particles, etc.
+
+Physics System 
+Powered by nVidia PhysX technology, can utilise multiple CPU cores, AGEIA PhysX hardware, or nVidia GPU hardware.
+Tightly integrated into the content pipeline and the game itself, including physical materials on all surfaces, physically driven sound, physically driven animations
+Rigid body and multi-jointed constructions. Breakable fences, walls , sheds and other objects. Thousands of different physical entities simulated per frame.
+Cloth simulation, water physics (including cross-interactions)
+Destruction and fracturing, physically based puzzles
+Soft body physics on selected special game entities
+On hardware-accelerated PhysX platforms engine implements full physically correct behaviour of particles such as smoke, debris, etc.
+
+Audio
+Multi-threaded high dynamic range Audio system with constant memory usage and data-driven design
+3D sound positioning, spatialisation and attenuation 
+Sound path tracing and transfer approximation for correct occlusion and obstruction perceiving.
+Reverb, low-pass/high-pass filtering, pitch shifting - all auto-calculated based on sound-path and adjustable by multi-layer environment zones, scripting or programmatically
+Dynamically reconstructing audio graphs
+OGG-vorbis compressed with adjustable quality, multi-threaded decompression
+
+AI and Gameplay
+Deep story-driven experience, dynamic and remarkable missions
+Different gameplay styles stealth/brutal, different combat settings
+Group behaviour (including support for information sharing and creating dynamic groups of agents that act together)
+Designer-friendly visual scripting system, enables designers to script levels and control advanced AI behaviours using the Flow-Graph visual scripting system, placing most AI gameplay control in their hands. 
+Efficient pathfinding for dynamic environment 
+Advanced 3D topology dynamic analysis
+Virtual vision, hearing, "smelling" - realistic, believable and time and memory efficient implementation enables characters to sense objects in a natural way, depending on the object velocity, luminocity, etc. 
+Multi-threaded Animation system controlled via visual scripting and flow graph
+
+Streaming Technology
+
+[Editor's note: CPU cores/threads mentioned usually means both normal CPUs and Synergetic Processing Units (SPU).]

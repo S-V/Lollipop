@@ -1,0 +1,43 @@
+
+//===================================================
+//	Coding style
+//===================================================
+
+Header files are included from other files.
+They are usually prefixed with h_*
+and have extensions: .hlsl, .fxh
+
+
+Source files are translation units, they contain
+GPU resources and programs (shaders).
+Prefixes: p_* (programs), r_* (resources),
+Extensions: .fx .
+
+
+//===================================================
+//	To do
+//===================================================
+
+
+1) support for shader libraries in DLLs:
+
+struct DLL_IMPORT Shader { //...
+
+
+
+2) static members can be anywhere in memory (bad for cache),
+use stack for lightweight shaders:
+
+struct Shader1
+{
+public:
+	static cbData1 data;
+};
+
+struct Shader2
+{
+public:
+	cbData2 data;
+};
+
+

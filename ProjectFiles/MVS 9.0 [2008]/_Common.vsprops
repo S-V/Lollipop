@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="Common"
+	IntermediateDirectory="R:\_\Intermediate\$(ConfigurationName)\$(ProjectName)"
+	>
+	<Tool
+		Name="VCCLCompilerTool"
+		AdditionalIncludeDirectories="&quot;$(ProjectDir)&quot;;&quot;..\..\SourceCode\$(ProjectName)&quot;;..\..\SourceCode;..\..\ExtLibs;&quot;D:\_\Development\ExtLibs\physics\bullet-2.79\src&quot;;..\..\Tools"
+		PreprocessorDefinitions="WIN32;_WINDOWS;"
+		StringPooling="true"
+		EnableEnhancedInstructionSet="0"
+		FloatingPointModel="2"
+		WarningLevel="4"
+		DebugInformationFormat="3"
+	/>
+	<Tool
+		Name="VCLibrarianTool"
+		OutputFile=""
+		AdditionalLibraryDirectories="$(LibDir);$(IntDir);$(OutDir);"
+		IgnoreDefaultLibraryNames="LIBCMT.lib"
+	/>
+	<Tool
+		Name="VCLinkerTool"
+		OutputFile=""
+		AdditionalLibraryDirectories="&quot;$(LibDir)&quot;;&quot;$(IntDir)&quot;;&quot;$(OutDir)&quot;"
+		IgnoreDefaultLibraryNames="LIBCMT.lib"
+		GenerateDebugInformation="true"
+	/>
+	<UserMacro
+		Name="LibDir"
+		Value="R:\_\Build\$(ConfigurationName)"
+	/>
+	<UserMacro
+		Name="ToolsSrcDir"
+		Value="D:\_\Development\Tools"
+	/>
+	<UserMacro
+		Name="ToolsBinDir"
+		Value="D:\_\Development\Binaries\Tools"
+	/>
+</VisualStudioPropertySheet>

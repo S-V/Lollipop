@@ -1,0 +1,23 @@
+
+Modules & Plugings:
+Baza - system-level and foundation library.
+Meshok - a small library of mesh utilities.
+Svet - raytracing (offline) & lightmap generation
+Sila - dynamics simulation
+Udar - collision detection
+
+The name of my engine:
+
+ABC engine ( absolute beginner's C..? engine ).
+Absolute Beginner's Crappy engine.
+Mixer, IrrMix ( intermediate representations mixing ),
+SGE - simple/stupid/slow game engine,
+SAGE - stupid adolescent game engine.
+
+Simpleton?
+Lollipop? Sounds a bit childish. Ledenetz? Source files will be named like this: LolRenderer, LolAPI, etc...
+Bonbon? Luftballon?
+
+
+
+PE == Poor Engine, Photon Engine ?

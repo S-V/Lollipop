@@ -1,0 +1,18 @@
+Base - foundation layer ( kernel, base framework ).
+It contains mostly basic math, OS abstraction layer.
+
+It can be used as a base for pretty much any engine (of any game genre).
+
+Dependencies: None.
+
+Folders (modules):
+
+Build - compile configuration.
+Common - common platform-independent stuff.
+System - low-level platform abstraction layer.
+Debug - misc. helpers for debugging.
+Types - basic types.
+Memory - memory management.
+Object - object model (class descriptors, object management, run-time type information, etc).
+IO - input / output systems.
+Job - job system.

@@ -1,0 +1,106 @@
+Tests:
+
+timestep - 25,30,45,60,120
+
+1) tall sphere stack (as big as possible)
+2) tall box stack
+3)
+
+E:\_\Engine\Development\SourceCode
+
+Stats should be sorted (first - the slowest (most MS))
+
+
+
+
+
+
+Yes. It would be the average position of the individual polygon. Instead of mass, you would use area, so the idea would essentially be:
+
+for each polygon
+    for each vertex in polygon
+        average_position += vertex.position
+    average_position /= num_vertexes
+    numerator += average_position * polygon.area
+    denominator += polygon.area
+
+center = numerator/denominator
+
+
+If you do all the area operations with sign, you can simply loop through the edges and pretend that they form a triangle with the origin. It simplifies the code a bit:
+
+#include <iostream>
+#include <vector>
+
+struct Point {
+  double x, y;
+  Point(double x, double y) : x(x), y(y) {
+  }
+
+  Point &unorthodox_sum(Point const &p) {
+    x += p.x;
+    y += p.y;
+
+    return *this;
+  }
+
+  Point &unorthodox_scaling(double scale) {
+    x *= scale;
+    y *= scale;
+
+    return *this;
+  }
+};
+
+class Polygon {
+  std::vector<Point> vertices;
+
+public:
+  template <typename It>
+  Polygon(It begin, It end) : vertices(begin, end) {
+  }
+
+  Point &operator[](unsigned n) {
+    return vertices[n%vertices.size()];
+  }
+
+  Point const &operator[](unsigned n) const {
+    return vertices[n%vertices.size()];
+  }
+
+  unsigned size() const {
+    return vertices.size();
+  }
+};
+
+Point barycenter(Polygon const &P) {
+  Point result(0.0,0.0);
+  double total_area=0.0;
+
+  for(unsigned i=0; i<P.size(); ++i) {
+    double triangle_area = 0.5*(P[i].x*P[i+1].y-P[i].y*P[i+1].x);
+    total_area += triangle_area;
+    Point triangle_barycenter((P[i].x+P[i+1].x)*(1.0/3.0), (P[i].y+P[i+1].y)*(1.0/3.0));
+    triangle_barycenter.unorthodox_scaling(triangle_area);
+    result.unorthodox_sum(triangle_barycenter);
+  }
+  result.unorthodox_scaling(1.0/total_area);
+  return result;
+}
+
+int main() {
+  Point points[4]={Point(1.0,0.0),Point(3.0,2.0),Point(1.0,2.0),Point(0.0,1.0)};
+  Polygon polygon(points, points+4);
+
+  Point b = barycenter(polygon);
+  std::cout << '(' << b.x << ',' << b.y << ')' << '\n';
+}
+
+
+
+	glEnable( GL_BLEND );
+	glBlendFunc( GL_SRC_ALPHA, GL_ONE );
+	glBlendFunc( GL_DST_ALPHA, GL_ZERO );
+
+	//	glDisable( GL_DEPTH_TEST );
+	glEnable( GL_DEPTH_TEST );

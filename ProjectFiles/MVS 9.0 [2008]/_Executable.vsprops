@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="Executable"
+	OutputDirectory="R:\_\Bin"
+	InheritedPropertySheets=".\_Common.vsprops"
+	>
+	<Tool
+		Name="VCCLCompilerTool"
+		AdditionalIncludeDirectories=""
+	/>
+	<Tool
+		Name="VCLibrarianTool"
+		OutputFile="$(OutDir)\$(ProjectName).exe"
+		AdditionalLibraryDirectories=""
+	/>
+	<Tool
+		Name="VCLinkerTool"
+		OutputFile="$(OutDir)\$(ProjectName)[$(ConfigurationName)].exe"
+		AdditionalLibraryDirectories=""
+		SubSystem="2"
+	/>
+	<UserMacro
+		Name="LibDir"
+		Value="R:\_\Build\$(ConfigurationName)"
+	/>
+</VisualStudioPropertySheet>

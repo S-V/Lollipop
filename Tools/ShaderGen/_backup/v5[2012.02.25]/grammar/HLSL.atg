@@ -1,0 +1,632 @@
+/*
+=============================================================================
+	File:	HLSL.atg
+	Desc:	Shader script grammar specification for CoCo/R.
+			This is basically an extended HLSL grammar.
+=============================================================================
+*/
+
+// The name after the keyword COMPILER is the grammar name and must match the name 
+// after the keyword  END. The grammar name also denotes the topmost nonterminal 
+// symbol (the start symbol). The parser specification must contain a production for this 
+// symbol. 
+COMPILER HLSL
+
+
+//---------------------------------------------------------------------------
+// Fields and methods of the generated parser.
+// They are copied to the header file of the generated parser.
+//---------------------------------------------------------------------------
+
+private:
+	const ParseFileInput &	input;
+	ParseFileOutput &		output;
+	UINT	numWarnings;
+	UINT	numErrors;
+
+public:
+	wrSourceFile& ParsedFile() { return output.fileData; }
+
+	wrLocation Location() const { return scanner->CurrLocation(); }
+	const wrBuffer& TokenBuf() const { return t->text; }
+	const char* TokenStr() const { return t->text.ToChars(); }
+
+	UINT Line() const { return scanner->CurrLocation().line; }
+	UINT Column() const { return scanner->CurrLocation().column; }
+
+	const char* SourceFileName() const { return input.pathToSrcFile.ToChars(); }
+
+	void Message( const char* msg )
+	{
+		mxPutf("%s: %s\n",SourceFileName(),msg);
+	}
+	void Warning( const char* fmt, ... )
+	{
+		++numWarnings;
+		char	buffer[ MAX_STRING_CHARS ];
+		MX_GET_VARARGS_ANSI( buffer, fmt );
+		Warning( Line(), Column(), buffer );
+	}
+	void Warning( int line, int column, const char* msg )
+	{
+		++numWarnings;
+		mxPutf("%s(%d,%d): Warning: %s\n",
+			SourceFileName(),line,column,msg);
+	}
+	void Error( const char* fmt, ... )
+	{
+		++numErrors;
+		char	buffer[ MAX_STRING_CHARS ];
+		MX_GET_VARARGS_ANSI( buffer, fmt );
+		Error( Line(), Column(), buffer );
+		mxBeep(200);
+	}
+	void Error( int line, int column, const char* msg )
+	{
+		++numErrors;
+		mxPutf("%s(%d,%d): Error: %s\n",
+			SourceFileName(),line,column,msg);
+		mxBeep(200);
+	}
+	void SyntaxError( int line, int column, const char* msg )
+	{
+		++numErrors;
+		mxPutf("%s(%d,%d): Syntax error: %s\n",
+			SourceFileName(),line,column,msg);
+		mxBeep(200);
+	}
+
+	UINT NumWarnings() const { return numWarnings; }
+	UINT NumErrors() const { return numErrors; }
+
+
+	U4 TokenToU32( U4 minValue = 0, U4 maxValue = U4(-1) )
+	{
+		U4 v = ParseInteger( TokenStr() );
+		if( (v < minValue) || (v > maxValue) ) {
+			Error("expected an integer in range [%d..%d]",minValue,maxValue);
+			return 0;
+		}
+		return v;
+	}
+	F8 TokenToF32( F8 minValue = 1e-40, F8 maxValue = 1e+40 )
+	{
+		F8 v = ParseFloat( TokenStr() );
+		if( (v < minValue) || (v > maxValue) ) {
+			Error("expected a floating-point value in range [%f..%f]",(F4)minValue,(F4)maxValue);
+			return 0.0f;
+		}
+		return v;
+	}
+
+	inline void SetPos( wrSourceElement & x ) { x.pos = this->Location(); }
+
+//---------------------------------------------------------------------------
+//	Scanner specification
+//---------------------------------------------------------------------------
+
+// By default, Coco/R generates scanners that are case sensitive.
+// If this is not desired, one has to write IGNORECASE at the beginning of the scanner specification.
+//
+//IGNORECASE
+
+
+CHARACTERS
+	letter     = 'A'..'Z' + 'a'..'z' + '_'.
+	oct        = '0'..'7'.	// the set of all octal digits
+	digit      = '0'..'9'.	// the set of all decimal digits
+	nzdigit    = '1'..'9'.	// the set of all non-zero digits
+	hex        = digit + 'a'..'f' + 'A'..'F'.	// the set of all hexadecimal digits
+	notQuote   = ANY - '"' - "\r\n".
+	notApo     = ANY - '\'' - "\r\n".
+	notDigit	= ANY - digit.	// any character that is not a digit
+
+	tab        = '\t'.
+	cr         = '\r'.
+	lf         = '\n'.			// end of line
+	newLine    = cr + lf.
+	notNewLine = ANY - newLine .
+	ws         = " " + tab + '\u000b' + '\u000c'.
+
+TOKENS
+	// identifier
+	identifier    = letter {letter | digit}.
+
+	// floating-point constant
+	float_constant =
+		( '.' digit {digit} [('e'|'E')  ['+'|'-'] digit {digit}]
+			| digit {digit} '.' {digit} [('e'|'E')  ['+'|'-'] digit {digit}]
+			| digit {digit} ('e'|'E')  ['+'|'-'] digit {digit}
+		)
+		['f'|'l'|'F'|'L']
+		.
+
+	// integer constant
+	integer_constant =
+		( nzdigit {digit}
+			| '0' {oct}
+			| ("0x"|"0X") hex {hex}
+		)
+		{'u'|'U'|'l'|'L'}
+		.
+		
+	// character constant
+	char_constant  = '\'' notApo {notApo} '\''. // no check for valid escape sequences
+
+	// string constant
+	string_constant   = '"' {notQuote} '"'.        // no check for valid escape sequences
+	
+	//optional_semicolon = {';'}.
+
+	// tokens defined in order to get their names for LL(1) conflict resolvers
+	auto      = "auto".
+	case      = "case".
+	cbuffer   = "cbuffer".
+	char      = "char".
+	const     = "const".
+	default   = "default".
+	double    = "double".
+	enum      = "enum".
+	extern    = "extern".
+	// messed up with constant_buffer_element
+	//float     = "float".
+	//int       = "int".
+	//long      = "long".
+	register  = "register".
+	short     = "short".
+	signed    = "signed".
+	static    = "static".
+	struct    = "struct".
+	typedef   = "typedef".
+	union     = "union".
+	unsigned  = "unsigned".
+	void      = "void".
+	volatile  = "volatile".
+	comma     = ','.
+	semicolon = ';'.
+	colon     = ':'.
+	star      = '*'.
+	lpar      = '('.
+	rpar      = ')'.
+	lbrack    = '['.
+	rbrack    = ']'.
+	lbrace    = '{'.
+	rbrace    = '}'.
+	ellipsis  = "...".
+
+	// DirectX-specific
+
+	BIND_HS		= "HS".
+	BIND_DS		= "DS".
+	BIND_TS		= "TS".
+	BIND_VS		= "VS".
+	BIND_GS		= "GS".
+	BIND_PS		= "PS".
+
+
+
+// Pragmas are tokens that may occur anywhere in the input stream.
+// They are excluded from the token  stream that is passed to the parser.
+// Pragmas are declared like tokens, but they may  have a semantic action
+//  associated with them that is executed whenever they are recognized by the scanner.
+//
+PRAGMAS
+	//---- preprocessor commands (not handled here)
+	ppDefine  = '#' {ws} "define" {notNewLine} newLine.
+	ppUndef   = '#' {ws} "undef" {notNewLine} newLine.
+	ppIf      = '#' {ws} "if" {notNewLine} newLine.
+	ppElif    = '#' {ws} "elif" {notNewLine} newLine.
+	ppElse    = '#' {ws} "else" {notNewLine} newLine.
+	ppEndif   = '#' {ws} "endif" {notNewLine} newLine.
+	ppInclude = '#' {ws} "include" {notNewLine} newLine.
+
+// Comments are declared by specifying their opening and closing brackets.
+// The keyword NESTED denotes that they can be nested.
+//
+COMMENTS FROM "//" TO lf			// C++-style one-line comment
+COMMENTS FROM "/*" TO "*/"			// C-style multi-line comment
+COMMENTS FROM "/+" TO "+/" NESTED	// D-style nested comment
+
+// Characters such as blanks, tabulators or end-of-line symbols are usually considered
+// as  white space that should be  ignored by the scanner.
+//
+IGNORE '\t' + '\r' + '\n'
+
+
+//---------------------------------------------------------------------------
+//	Parser specification
+//---------------------------------------------------------------------------
+
+PRODUCTIONS
+
+
+HLSL
+	= declaration {declaration}
+	.
+
+declaration
+	= render_target_declaration
+	| multi_render_target_declaration
+	| sampler_state_declaration
+	| depth_stencil_state_declaration
+	| rasterizer_state_declaration
+	| blend_state_declaration
+	| state_block_declaration
+	| shader_program_declaration
+	| vertex_declaration
+	| shared_section_declaration
+	| ANY
+	.
+
+render_target_declaration =			(. wrRenderTarget& newRT = ParsedFile().renderTargets.Add(); newRT.pos = Location(); .)
+	"RenderTarget" identifier		(. newRT.name = TokenBuf(); .)
+	'{'
+		( ("SizeX" integer_constant)	(. newRT.sizeX.SetAbsoluteSize( TokenToU32() ); .)
+		| ("ScaleX" float_constant)		(. newRT.sizeX.SetRelativeSize( TokenToF32() ); .)
+		)
+
+		( ("SizeY" integer_constant)	(. newRT.sizeY.SetAbsoluteSize( TokenToU32() ); .)
+		| ("ScaleY" float_constant)		(. newRT.sizeY.SetRelativeSize( TokenToF32() ); .)
+		)
+
+		"Format" identifier				(. newRT.format = TokenBuf(); .)
+
+		[ "Info" string_constant ]		(. newRT.info = TokenBuf(); .)
+	'}'
+	.
+
+
+	
+multi_render_target_declaration =	(. wrMultiRenderTarget& newMRT = ParsedFile().multiRenderTargets.Add(); SetPos(newMRT); .)
+	"MultiRenderTarget" identifier	(. newMRT.name = TokenBuf(); .)
+	'{'
+		multi_render_target_list
+		[ "Info" string_constant ]		(. newMRT.info = TokenBuf(); .)
+	'}'
+	.
+
+multi_render_target_list =		(. wrMultiRenderTarget& newMRT = ParsedFile().multiRenderTargets.GetLast(); .)
+	"RenderTarget" identifier	(. wrRenderTarget& newRT = newMRT.renderTargets.Add();  SetPos(newRT); newRT.name = TokenBuf();.)
+	'{'
+	[ "ClearColor" rgba_color< newRT.clearColor > ]
+	'}'
+	{ multi_render_target_list }
+	.
+	
+	
+sampler_state_declaration =			(. wrSamplerState& newSS = ParsedFile().samplerStates.Add(); newSS.pos = Location(); .)
+	
+	(
+		"SamplerState" identifier				(. newSS.name = TokenBuf(); .)
+		|
+		"SamplerComparisonState" identifier		(. newSS.name = TokenBuf(); newSS.bIsSamplerCmpState = true; .)
+	)
+
+	'{'
+		"Filter" identifier				(. newSS.Filter = TokenBuf(); .)
+		
+		[ "AddressU" identifier 		(. newSS.AddressU = TokenBuf(); .)]
+		[ "AddressV" identifier 		(. newSS.AddressV = TokenBuf(); .)]
+		[ "AddressW" identifier 		(. newSS.AddressW = TokenBuf(); .)]
+		
+		[ "MipLODBias" float_constant 			(. newSS.MipLODBias = TokenToF32(); .)]
+		[ "MaxAnisotropy" integer_constant		(. newSS.MaxAnisotropy = TokenToU32(0,16); .)]
+		
+		[ "ComparisonFunc" identifier 			(. newSS.ComparisonFunc = TokenBuf(); .)]
+		
+		[ "BorderColor" rgba_color< newSS.BorderColor > ]
+		
+		[ "MinLOD" float_constant 				(. newSS.MinLOD = TokenToF32(); .)]
+		[ "MaxLOD" float_constant 				(. newSS.MaxLOD = TokenToF32(); .)]
+		
+	'}'
+	.
+
+
+
+
+
+depth_stencil_state_declaration =	(. wrDepthStencilState& newDS = ParsedFile().depthStencilStates.Add(); newDS.pos = Location(); .)
+	"DepthStencilState" identifier		(. newDS.name = TokenBuf(); .)
+	'{'
+		"DepthEnable" boolean_constant		(. newDS.DepthEnable = TokenBuf(); .)
+		"DepthWriteMask" bit_mask 		(. newDS.DepthWriteMask = TokenBuf(); .)
+		"DepthFunc" identifier 				(. newDS.DepthFunc = TokenBuf(); .)
+		"StencilEnable" boolean_constant 	(. newDS.StencilEnable = TokenBuf(); .)
+	'}'
+	.
+
+rasterizer_state_declaration =	(. wrRasterizerState& newRS = ParsedFile().rasterizerStates.Add(); newRS.pos = Location(); .)
+	"RasterizerState" identifier		(. newRS.name = TokenBuf(); .)
+	'{'
+		"FillMode" identifier						(. newRS.FillMode = TokenBuf(); .)
+		"CullMode" identifier 						(. newRS.CullMode = TokenBuf(); .)
+		[ "FrontCounterClockwise" boolean_constant 	(. newRS.FrontCounterClockwise = TokenBuf(); .)]
+		[ "DepthBias" integer_constant 				(. newRS.DepthBias = TokenBuf(); .)]
+		[ "DepthBiasClamp" float_constant			(. newRS.DepthBiasClamp = TokenBuf(); .)]
+		[ "SlopeScaledDepthBias" float_constant 	(. newRS.SlopeScaledDepthBias = TokenBuf(); .)]
+		[ "DepthClipEnable" boolean_constant 		(. newRS.DepthClipEnable = TokenBuf(); .)]
+		[ "ScissorEnable" boolean_constant 			(. newRS.ScissorEnable = TokenBuf(); .)]
+		[ "MultisampleEnable" boolean_constant 		(. newRS.MultisampleEnable = TokenBuf(); .)]
+		[ "AntialiasedLineEnable" boolean_constant 	(. newRS.AntialiasedLineEnable = TokenBuf(); .)]
+	'}'
+	.
+
+
+//
+// Only one render target supported only!
+//
+blend_state_declaration =	(. wrBlendState& newBS = ParsedFile().blendStates.Add(); newBS.pos = Location(); .)
+	"BlendState" identifier		(. newBS.name = TokenBuf(); .)
+	'{'
+		"BlendEnable" boolean_constant				(. newBS.BlendEnable = TokenBuf(); .)
+		[ "AlphaToCoverageEnable" boolean_constant	(. newBS.AlphaToCoverageEnable = TokenBuf(); .)]
+		[ "SrcBlend" identifier 					(. newBS.SrcBlend = TokenBuf(); .)]
+		[ "DestBlend" identifier 					(. newBS.DestBlend = TokenBuf(); .)]
+		[ "BlendOp" identifier 						(. newBS.BlendOp= TokenBuf(); .)]
+		[ "SrcBlendAlpha" identifier				(. newBS.SrcBlendAlpha = TokenBuf(); .)]
+		[ "DestBlendAlpha" identifier 				(. newBS.DestBlendAlpha = TokenBuf(); .)]
+		[ "BlendOpAlpha" identifier 				(. newBS.BlendOpAlpha = TokenBuf(); .)]
+		[ "RenderTargetWriteMask" bit_mask			(. newBS.RenderTargetWriteMask = TokenBuf(); .)]
+	'}'
+	.
+
+state_block_declaration =	(. wrStateBlock& newSB = ParsedFile().stateBlocks.Add(); newSB.pos = Location(); .)
+	"StateBlock" identifier		(. newSB.name = TokenBuf(); .)
+	'{'
+		[ "RasterizerState" identifier 				(. newSB.rasterizerState = TokenBuf(); .)]
+
+		[ "DepthStencilState" identifier			(. newSB.depthStencilState = TokenBuf(); .)]
+		[ "StencilRef" integer_constant 			(. newSB.stencilRef = TokenBuf(); .)]
+
+		[ "BlendState" identifier 					(. newSB.blendState = TokenBuf(); .)]
+		[ "BlendFactor" rgba_color< newSB.blendFactorRGBA > ]
+		[ "SampleMask" bit_mask 					(. newSB.sampleMask = TokenBuf(); .)]
+	'}'
+	.
+
+rgba_color< FColor & rgba > =
+	"RGBA("
+		float_constant	(. rgba.R = TokenToF32( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.G = TokenToF32( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.B = TokenToF32( 0.0f, 1.0f ); .)
+		float_constant	(. rgba.A = TokenToF32( 0.0f, 1.0f ); .)
+	')'
+	.
+
+
+
+bit_mask = identifier | integer_constant.
+
+boolean_constant = identifier | integer_constant.
+
+
+
+
+
+
+
+
+
+
+
+
+
+shader_program_declaration =	(. wrShaderProgram& newSP = ParsedFile().NewElement( this, ParsedFile().shaders ); SetPos(newSP); .)
+	"Shader" identifier			(. newSP.name = TokenBuf(); .)
+	[ shader_defines< newSP > ]
+	'{'
+		[ shader_inputs ]
+		"Code" 					(. ParseCode( newSP.code, this ); .)
+	'}'
+	'='
+	'{'
+		"VertexShader"	identifier	(. newSP.vertexShader = TokenBuf(); .)
+		"PixelShader"	identifier	(. newSP.pixelShader = TokenBuf(); .)
+	'}'
+	.
+	
+shader_defines< wrShaderProgram & shader > =
+	'<'
+		shader_define< shader >
+		{ shader_define< shader > }
+	'>'
+	.
+	
+shader_define< wrShaderProgram & shader > =	(. wrShaderDefine& newDefine = shader.defines.Add(); SetPos(newDefine); .)
+	identifier		(. newDefine.name = TokenBuf(); .)
+	'='
+	integer_constant	(. newDefine.defaultValue = TokenToU32(0,1); .)
+	.
+
+	
+shader_inputs = "Inputs" (. wrShaderProgram & shader = ParsedFile().shaders.GetLast(); .)
+	[using_shared_sections_decls_list< shader.inputs.sharedSections >]
+	'{'	(. SetPos(shader.inputs); .)
+		[shader_variables_list_decl< shader.inputs >]
+	'}'
+	.
+
+shader_variables_list_decl< wrShaderVariables & vars > =
+	shader_variable_decl< vars >
+	{ shader_variable_decl< vars > }
+	.
+
+shader_variable_decl< wrShaderVariables & vars >
+	= constant_buffer_decl< vars >
+	| sampler_state_decl< vars >
+	| shader_resource_decl< vars >
+	.
+
+using_shared_sections_decls_list< SharedSectionsList& sharedSections >
+	= ':'
+	using_shared_sections_decl<sharedSections>
+	{using_shared_sections_decl<sharedSections>}
+	.
+
+using_shared_sections_decl< SharedSectionsList& sharedSections >
+	= identifier (. sharedSections.Add(TokenBuf()); .)
+	.
+
+	
+	
+	
+constant_buffer_decl< wrShaderVariables & vars > =	(. wrShaderConstantBuffer& newCB = vars.constantBuffers.Add(); SetPos(newCB); .)
+	"cbuffer"	identifier		(. newCB.name = TokenBuf(); .)
+	
+	[ shader_stage_bind_flags< newCB > ]
+	
+	[constant_buffer_register<newCB>]
+	'{'
+		constant_buffer_element<newCB>  {constant_buffer_element<newCB>}
+	'}' ';'
+	.
+
+constant_buffer_register< wrShaderConstantBuffer & cb >
+	= ':' "register"
+	'('
+		integer_constant		(. cb.iRegister = TokenToU32(0,MAX_CONSTANT_BUFFER_SLOTS-1); .)
+	')'
+	.
+
+
+constant_buffer_element< wrShaderConstantBuffer & cb >
+	=	(. wrCBVar& newCBElem = cb.elements.Add(); SetPos(newCBElem); .)
+		type_name			(. newCBElem.typeName = TokenBuf(); .)
+		identifier			(. newCBElem.name = TokenBuf(); .)
+		
+		[
+			// array declaration
+			'['
+				identifier	(. Assert(newCBElem.arrayDim.IsEmpty()); newCBElem.arrayDim = TokenBuf(); .)
+			']'
+		]
+
+		';'
+	.
+
+	
+	
+
+sampler_state_decl< wrShaderVariables & vars > =	(. wrShaderSamplerState& newSS = vars.samplers.Add(); SetPos(newSS); .)
+	
+	(
+		"SamplerState" identifier				(. newSS.name = TokenBuf(); .)
+		|
+		"SamplerComparisonState" identifier		(. newSS.name = TokenBuf(); newSS.bIsSamplerCmpState = true; .)
+	)
+	
+	[ shader_stage_bind_flags< newSS > ]
+	
+	[
+	':' "register"
+	'('
+		integer_constant		(. newSS.iRegister = TokenToU32(0,MAX_SAMPLER_STATE_SLOTS-1); .)
+	')'
+	]
+	[
+	'=' identifier		(. newSS.initializer = TokenBuf(); .)
+	]
+	';'
+	.
+
+	
+	
+	
+	
+	
+	
+	
+	
+shader_stage_bind_flags< wrRegisterBound & o > =
+	'('				(. o.bindFlags = 0; .)
+		[BIND_HS		(. o.bindFlags |= CB_Bind_HS; .)]
+		[BIND_DS		(. o.bindFlags |= CB_Bind_DS; .)]
+		[BIND_TS		(. o.bindFlags |= CB_Bind_TS; .)]
+		[BIND_VS		(. o.bindFlags |= CB_Bind_VS; .)]
+		[BIND_GS		(. o.bindFlags |= CB_Bind_GS; .)]
+		[BIND_PS		(. o.bindFlags |= CB_Bind_PS; .)]
+	')'				(. if( o.bindFlags == 0 ) Error("Object is not bound to any shader stage"); .)
+	.
+
+
+	
+	
+	
+	
+
+shader_resource_decl< wrShaderVariables & vars > =	(. wrShaderResource& newRes = vars.resources.Add(); SetPos(newRes); .)
+	"Texture2D"
+	[
+	'<'
+		type_name
+	'>'
+	]
+
+	identifier		(. newRes.name = TokenBuf(); .)
+
+	[ shader_stage_bind_flags< newRes > ]
+
+	[
+	':' "register"
+	'('
+		integer_constant		(. newRes.iRegister = TokenToU32(0,MAX_SHADER_RESOURCE_SLOTS-1); .)
+	')'
+	]
+
+	[
+	'=' identifier		(. newRes.initializer = TokenBuf(); .)
+	]
+	
+	';'
+	.
+
+	
+type_name = identifier
+	.
+
+
+
+
+vertex_declaration =
+	"Vertex"		(. wrVertexDeclaration& newVtx = ParsedFile().NewVertex( this ); .)
+	identifier		(. newVtx.name = TokenBuf(); .)
+	'{'
+		vertex_element  {vertex_element}
+	'}'
+	.
+
+vertex_element = 	(. wrVertexElement& newVtxElem = ParsedFile().vertexDeclarations.GetLast().elements.Add(); .)
+	identifier		(. newVtxElem.name = TokenBuf(); .)
+	[string_constant (. newVtxElem.info = TokenBuf(); .)]
+	'{'
+	"SemanticName"			identifier			(. newVtxElem.SemanticName = TokenBuf(); .)
+	"SemanticIndex"			integer_constant	(. newVtxElem.SemanticIndex = TokenToU32(0,32); .)
+	"Format"				identifier			(. newVtxElem.Format = TokenBuf(); .)
+
+	// [ "AlignedByteOffset"	integer_constant (. newRes.initializer = TokenBuf(); .) ]
+	[ "InputSlot"	integer_constant (. newVtxElem.InputSlot = TokenToU32(0,32); .) ]
+	// [ "InputSlotClass"	integer_constant (. newRes.initializer = TokenBuf(); .) ]
+	// [ "InstanceDataStepRate"	integer_constant (. newRes.initializer = TokenBuf(); .) ]
+	'}'
+	.
+
+
+shared_section_declaration = "Shared" (. wrSharedSection & sharedSection = ParsedFile().sharedSections.Add(); SetPos(sharedSection); .)
+	identifier	(. sharedSection.name = TokenBuf(); .)
+	'{'
+	shared_variables_declaration< sharedSection >
+	[shared_code_declaration< sharedSection >]
+	'}'
+	.
+
+shared_variables_declaration< wrSharedSection & sharedSection > = "Variables"
+	'{'
+		shader_variables_list_decl< sharedSection.vars >
+	'}'
+	.
+
+shared_code_declaration< wrSharedSection & sharedSection > = "Code" (. ParseCode( sharedSection.code, this ); .)
+	.
+
+END HLSL.

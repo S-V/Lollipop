@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="Release"
+	InheritedPropertySheets=".\_Common.vsprops"
+	>
+	<Tool
+		Name="VCCLCompilerTool"
+		Optimization="3"
+		InlineFunctionExpansion="2"
+		EnableIntrinsicFunctions="true"
+		FavorSizeOrSpeed="1"
+		WholeProgramOptimization="false"
+		AdditionalIncludeDirectories=""
+		PreprocessorDefinitions="NO_PROFILING;WIN32;NDEBUG;_WINDOWS;_USRDLL;ENGINE_EXPORTS;$(NOINHERIT)"
+		ExceptionHandling="0"
+		RuntimeLibrary="2"
+		BufferSecurityCheck="false"
+		EnableEnhancedInstructionSet="2"
+		FloatingPointModel="2"
+		RuntimeTypeInfo="false"
+		UsePrecompiledHeader="0"
+		PrecompiledHeaderThrough=""
+		AssemblerOutput="2"
+	/>
+	<Tool
+		Name="VCLibrarianTool"
+		OutputFile=""
+		IgnoreDefaultLibraryNames="MSVCRT.lib"
+	/>
+	<Tool
+		Name="VCLinkerTool"
+		OutputFile=""
+		AdditionalLibraryDirectories=""
+		IgnoreDefaultLibraryNames=""
+		GenerateDebugInformation="true"
+		OptimizeReferences="2"
+		EnableCOMDATFolding="2"
+		LinkTimeCodeGeneration="0"
+	/>
+	<UserMacro
+		Name="OutLibDir"
+		Value="$(OutDir)"
+	/>
+	<UserMacro
+		Name="OutIntDir"
+		Value="$(IntDir)"
+	/>
+</VisualStudioPropertySheet>

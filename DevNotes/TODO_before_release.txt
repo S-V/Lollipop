@@ -1,0 +1,210 @@
+* rename Assert to mxASSERT
+
+* almost allocation-free config file
+
+* delegates - dynamic arrays of functions - poor memory management - check everything in code,
+replace with fixed_delegates
+
+* periodically scan heap and detect cheats
+
+* don't use printf(), use overloaded << and >> for formatted text output
+
+* use D3DStripShader
+
+* remove Renderer/Util/MeshCreator.*
+
+* class names shouldn't be left in the final executable;
+they are not used for TypeDescriptor anyway.
+
+* remove idToken, idLexer, idParser;
+avoid dynamic memory allocation during parsing
+
+* measure RAM Speed: %d MB/s
+
+
+
+* multiple builds:
+
+Debug - very slow
+Release[Checked] - optimized build with checks and assertions
+Release[MinSize] - optimized for minimum size
+Release[Metrics] - optimized build for profiling
+Release[LTCG] - maximally optimized (link-time code gen)
+
+Release[POGO] - with profile-guided optimization?
+
+
+
+
+
+* create a TOC file to prevent mods/cheats, e.g.:
+173856 0 0 ..\Binaries\Win32\Zdp\zdp.exe c0ba42c853d4e70a4498a3780a58f0c4
+998 0 0 ..\Binaries\Win32\Zdp\ZdpConfig.xml d425baecd697ddd763ccad634dc26801
+637554 0 0 ..\Binaries\Win32\Zdp\zdp_background.bmp eeaa30fd850ad1f6b8819739c2e711c4
+
+also, compute hash of .exe, too.
+
+
+<download name="FDR" type="Map">
+ <index src="filelist.xml" dest="filelist.xml"/>
+ <files>
+  <file src="FDR.xml" dest="FDR.xml" size="491" md5="315ca8a3f7b4c175be3e9dbc0e695aff"/>
+  <file src="level.pak" dest="level.pak" size="2472888" md5="f56d49e472d8af4103bb34b4e1d0fcd9"/>
+ </files>
+</download>
+
+
+
+* generate "Game_LevelLoadTime.log" in development mode (like in Crysis2) :
+ [1.1.1.5620] Level BatteryPark loaded in 31 seconds
+
+* remove unused bytecode from shader cache
+* remove null-terminated string
+ Microsoft (R) HLSL Shader Compiler 9.29.952.3111
+ from compiled shader byte code.
+
+* use release version of TypeDescriptor,
+#define MX_EDITOR (0)
+#define MX_DEVELOPMENT (0)
+
+* use PtrToBool
+* spell check all source code
+* This feature can be optionally checked on:
+At the same time, two common sources of accidental task switching on games with keyboard-centric control schemes
+ are pressing the Windows logo key and activating the accessibility feature StickyKeys with the SHIFT key.
+  To address these cases by disabling the functionality, see the techniques described in Disabling Shortcut Keys in Games.
+
+* shader source code obfuscation
+
+//------------------------------------------------------------------------------------
+
+* shader cache should be named "Offline.sha"
+or
+pc_sm30_nv_zdot_base.sdc
+pc_sm40_ati_tree_leaf.sdc
+
+".msc" - mx shader cache
+
+PC_D3D_sm50_nv_....msc
+
+ShaderCache[NV__]
+ShaderCache[ATI_]
+ShaderCache[UNKN]
+
+or
+
+RefShaderCache-PC-D3D-SM3.upk
+
+//------------------------------------------------------------------------------------
+
+files can have extensions containing numbers, e.g. "bigfile.256"
+
+data files should be named:
+002481 (no extension)
+002483
+452521.xxx
+etc
+
+'strings' folder will contain Russian.txt, English.txt and German.txt.
+
+all game data will be packed into one file:
+game.dat or data.game
+
+rename all check() into ensure()
+
+strings are left unchanged in the final .exe, need to find way
+to guard them from prying eyes (make DXError a macro? strings are not compiled into release builds? file & line number info are encoded?)
+
+
+ 
+Author:
+Copyright © 2010
+___AUTHOR_NOTE___
+
+
+
+
+
+
+
+
+
+
+
+"GameInfo"
+{
+	// This is what shows up in the 'Third Party Games' area of the Steam games list.
+	game						"mymod"
+	type 						singleplayer_only
+	FileSystem
+	{
+	    SteamAppId	215		// GCF for Source SDK Base
+	    ToolsAppId	211		// Tools will load this (ie: source SDK caches) to get things like materials\debug, materials\editor, etc.
+
+		SearchPaths
+		{
+			Game				|gameinfo_path|.
+			Game				sourcetest
+			Game				hl2
+		}
+	}
+}
+
+{
+	// This is what shows up in the 'Third Party Games' area of the Steam games list.
+	game						"mymod"
+	type 						singleplayer_only
+        "developer" 		"noob industries"
+        "developer_url" 	"http://www.google.ie"
+        "icon" "resource\GameIconSteam\icon_mymod"
+	FileSystem
+	{
+	    SteamAppId	215		// GCF for Source SDK Base
+	    ToolsAppId	211		// Tools will load this (ie: source SDK caches) to get things like materials\debug, materials\editor, etc.
+
+		SearchPaths
+		{
+			Game				|gameinfo_path|.
+			Game				sourcetest
+			Game				hl2
+		}
+	}
+}
+
+
+
+
+// PackFiles.ini
+[Redirect]
+Textures.xpf=..\Textures
+CharacterTextures.xpf=..\Textures
+ObjectTextures.xpf=..\Textures
+MissionTextures.xpf=..\Textures
+MissionSounds.xpf=..\Sounds
+ObjectSounds.xpf=..\Sounds
+Music.xpf=..\Sounds
+VoicesDE.xpf=..\Sounds
+VoicesEN.xpf=..\Sounds
+
+
+
+
+
+Game has successfully terminated. All is well.
+Early exit while running the game, errors have probably happened.
+
+
+
+
+Media/PC_x86_64_DX11/Data.rpk
+
+
+
+ResourceSystem
+ContentManager
+ContentDatabase
+AssetDatabase
+ResourceSystem
+
+
+

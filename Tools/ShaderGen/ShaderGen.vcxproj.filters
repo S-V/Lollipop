@@ -1,0 +1,70 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="grammar">
+      <UniqueIdentifier>{bbc9f091-e021-41f5-865f-4dc77edc670e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="templates">
+      <UniqueIdentifier>{9432b595-e823-45bc-92b9-1861d272ca00}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="impl">
+      <UniqueIdentifier>{c15b385f-15da-460d-9de3-2d781b72f8db}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="grammar\build_parser.bat">
+      <Filter>grammar</Filter>
+    </None>
+    <None Include="grammar\HLSL.atg">
+      <Filter>grammar</Filter>
+    </None>
+    <None Include="grammar\Parser.frame">
+      <Filter>grammar</Filter>
+    </None>
+    <None Include="grammar\Scanner.frame">
+      <Filter>grammar</Filter>
+    </None>
+    <None Include="grammar\test.fx">
+      <Filter>grammar</Filter>
+    </None>
+    <None Include="templates\D3D11.inl">
+      <Filter>templates</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="impl\Common.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Parser.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Resolve.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Scanner.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\ShaderGen.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+    <ClCompile Include="impl\Translator.cpp">
+      <Filter>impl</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="impl\Common.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\DX11_Util.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\Parser.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="impl\Scanner.h">
+      <Filter>impl</Filter>
+    </ClInclude>
+    <ClInclude Include="ShaderGen.h" />
+    <ClInclude Include="stdafx.h" />
+  </ItemGroup>
+</Project>

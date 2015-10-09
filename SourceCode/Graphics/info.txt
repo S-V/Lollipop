@@ -1,0 +1,6 @@
+Graphics - a renderer back-end.
+Contains low-level graphics stuff (common macros,types and utilities),
+shaders/effects framework and so on.
+
+TODO:
+clean up this bloody mess.

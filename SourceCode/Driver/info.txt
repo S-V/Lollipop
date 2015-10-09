@@ -1,0 +1,8 @@
+Driver - windows engine driver.
+Responsibilities: creating windows, handling user input
+Dependencies: Base.
+
+
+Copyright:
+
+Portions shamelessly stolen from the Irrlicht Engine and GLFW.

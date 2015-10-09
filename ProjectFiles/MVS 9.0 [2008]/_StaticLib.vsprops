@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="windows-1251"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="StaticLib"
+	OutputDirectory="R:\_\Build\$(ConfigurationName)"
+	>
+	<Tool
+		Name="VCCLCompilerTool"
+		AdditionalIncludeDirectories=""
+		UsePrecompiledHeader="0"
+		PrecompiledHeaderThrough="$(ProjectName)_PCH.h"
+	/>
+	<Tool
+		Name="VCLibrarianTool"
+		OutputFile="$(OutDir)\$(ProjectName).lib"
+	/>
+	<Tool
+		Name="VCLinkerTool"
+		OutputFile="$(OutDir)\$(ProjectName).lib"
+		AdditionalLibraryDirectories=""
+	/>
+	<UserMacro
+		Name="OutLibDir"
+		Value="$(OutDir)"
+	/>
+	<UserMacro
+		Name="OutIntDir"
+		Value="$(IntDir)"
+	/>
+</VisualStudioPropertySheet>

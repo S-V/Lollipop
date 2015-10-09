@@ -1,0 +1,25 @@
+Core - core game engine subsystem.
+
+Contains:
+
+object system
+resource management system
+serialization framework
+virtual file system (I/O)
+editor framework (property framework, tweakable variables, hooks and callbacks)
+
+Depends on:
+	Base.
+
+
+// in russian
+
+по системе ресурсов (почему я "захардкодил" типы ресурсов):
+
+* создание ресурсов в движке - достаточно явно указать в коде, напр., MeshManager.CreateMesh - "хардкод" не нужен
+
+* создание ресурсов в скриптах или при загрузке - надо хранить соответствие resourceType-resourceLoader,
+можно мэпу, но быстрее и проще просто таблицу-массив, только типы ресурсов жёстко в коде придётся прописывать
+(при in-place загрузке, т.е. когда сделали "слепок" состояния игры, потом загрузили целиком в один кусок памяти
+и "пофиксапили" указатели, ссылки на ресурсы и т.д., т.е. имеется ввиду не рекурсивная загрузка по классам,
+когда по коду ясно, какие ресурсы грузятся)

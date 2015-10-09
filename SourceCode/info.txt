@@ -1,0 +1,14 @@
+
+Dependency graph:
+
+Base
+    Core, Graphics
+        Driver
+
+    Graphics
+        Renderer
+
+    Physics
+
+
+            Engine

@@ -1,0 +1,6 @@
+Engine - High-level engine framework.
+
+TODO:
+
+this stuff is highly experimental,
+written for flexibility, not for speed.

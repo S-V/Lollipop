@@ -1,0 +1,27 @@
+
+//-------------------------------------------------------------------
+
+Math:
+
+ - Coordinate system is left-handed (ala DirectX) with positive y as up axis (0;1;0) (positive z axis directed into the screen).
+ - All rotation angles are counter-clockwise when looking from the positive end of the rotation axis towards the origin
+ - An unrotated view vector points along the positive z-axis (0;0;1)
+
+//-------------------------------------------------------------------
+
+Units:
+
+  Physics units == Graphics units,
+  
+  my units are in meters,
+  
+  1 meter = 1 length unit,
+  1 kg = 1 mass unit
+
+//-------------------------------------------------------------------
+
+File system:
+
+backslashes are converted to slashes, e.g. a valid path name: "C:/progs/game/".
+
+//-------------------------------------------------------------------
